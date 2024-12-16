@@ -1,0 +1,6 @@
+PWD /home/alexa/Documents/TUM/s3_WS24/rl/presentation
+INPUT /usr/share/texlive/texmf-dist/web2c/texmf.cnf
+INPUT /usr/share/texlive/texmf-dist/web2c/texmf.cnf
+INPUT /var/lib/texmf/web2c/pdftex/latex.fmt
+INPUT _Einstellungen.tex
+OUTPUT _Einstellungen.log

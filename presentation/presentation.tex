@@ -83,10 +83,72 @@
 % Model and algo Slides (WIP)
 
 \begin{frame}
-	\frametitle{DQN}
+	\frametitle{Deep Q-Learning}
 	\vspace{0.5cm}
+		\begin{itemize}		
+			\item reinforcement learning technique to find the optimal action-value function \texttt{Q(s,a)}
+			\item It maps state-action pairs to their expected future rewards
+			\item Q-Update rule: $$Q(s,a) = Q(s,a) +  \alpha [r + \gamma  \ max_{a'} \ Q(s',a') - Q(s,a)]$$
+		\end{itemize}
+		\vspace{1cm}
+		\pause
+		\centering
+		\textbf{Challenge}: Traditional Q-learning fails for large or continuous state spaces
 \end{frame}
 
+\begin{frame}
+	\frametitle{Deep Q-Learning: Solution }
+	\vspace{0.5cm}
+	Use a \textbf{Deep Neural Network} (DNN) as a function approximator for $Q(s,a)$ instead of a table.
+		\begin{itemize}		
+			\item  \textbf{Input}: State $s$, \textbf{Output}: Q-values for all actions $a$
+			\item \textbf{Target Network}: stabilizes training by holding fixed weights for a few updates
+			\item \textbf{Experience Replay}: samples random batches of past experiences $(s,a,r,s')$ to break correlation in training data
+		\end{itemize}
+\end{frame}
+
+
+\begin{frame}
+	\frametitle{Deep Q-Learning Workflow }
+	\vspace{0.2cm}
+	Use a \textbf{Deep Neural Network} (DNN) as a function approximator for $Q(s,a)$ instead of a table.
+		\begin{enumerate}		
+			\pause
+			\item Initialize: \\ Q-Network $Q(s,a;\theta)$ and Target Network $Q'(s,a;\theta^{-})$
+			\pause
+			\item Action Selection: \\ Use an $\epsilon-$ greedy policy to balance exploration vs. exploitation.
+			\pause
+			\item Store Experience: \\ Add $(s,a,r,s')$ to a replay buffer
+			\pause
+			\item Train the Network: \\ 
+				\begin{itemize} 
+					 \item sample a minibatch from the buffer
+					 \item Compute target Q-values: $y = r + \gamma \ max_{a'} \ Q'(s',a';\theta^{-})$
+					\item Minimize loss: $L(\theta)=(y-Q(s,a,;\theta))^2$
+				\end{itemize}
+			\pause
+			\item Update Target Network: \\ Periodically copy weights: $\theta^{-} \leftarrow \theta$
+
+		\end{enumerate}
+\end{frame}
+
+\begin{frame}
+	\frametitle{Key Improvements and Applications}
+	\vspace{0.5cm}
+	Improvements:
+		\begin{itemize}		
+			\item \textbf{Double DQN}: Reduces overestimation of Q-values.
+			\item\textbf{Dueling DQN}: Separates value and advantage functions.
+			\item \textbf{Prioritized Experience Replay}: Samples important experiences more frequently.
+		\end{itemize}
+	\pause
+	Applications:
+		\begin{itemize}
+			\item Games
+			\item robotics
+			\item autonomous systems
+		\end{itemize}
+\end{frame}
 
 
 
@@ -100,6 +162,17 @@
 		\item Incorporating advanced techniques like Double DQN and Dueling DQN.
 		\item Testing against human players to evaluate real-world performance.
 		\item Extending the approach to other board games or strategy games (some side-projects).
+	\end{itemize}
+\end{frame}
+
+% Planning and Timeline
+
+\begin{frame}
+	\frametitle{Project Planning & Tiimeline}
+	\vspace{0.5cm}
+	\begin{itemize}
+		\item Iterative Development: 4 sprints $\rightarrow$ 4 weeks
+		\item TODO: insert image here
 	\end{itemize}
 \end{frame}
 

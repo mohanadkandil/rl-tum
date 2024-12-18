@@ -64,9 +64,9 @@
 	\frametitle{Introduction}
 	\vspace{0.5cm}
 	\begin{itemize}
-		\item Checkers is a strategy game involving diagonal moves of pieces and captures by jumping over opponent pieces.
-		\item The objective of the project is to create an AI player using reinforcement learning.
-		\item Techniques: Q-learning and Deep Q-Networks (DQN).
+		\item Checkers is a strategy game involving diagonal moves of pieces and captures by jumping over opponent pieces
+		\item The objective of the project is to create an AI player using reinforcement learning
+		\item Techniques: Q-learning and Deep Q-Networks (DQN)
 	\end{itemize}
 	\centering
 	\includegraphics[scale=0.25]{checkers}
@@ -77,14 +77,14 @@
 	\frametitle{What is Reinforcement Learning?}
 	\vspace{0.2cm}
 	\begin{itemize}
-		\item A machine learning paradigm focused on training agents to make sequences of decisions.
+		\item A machine learning paradigm focused on training agents to make sequences of decisions
 		\item Key components:
 		\begin{itemize}
-			\item \textbf{Agent}: Learns to act in an environment.
-			\item \textbf{Environment}: The system with which the agent interacts.
-			\item  \textbf{Reward}: Feedback signal indicating the success of an action.
+			\item \textbf{Agent}: Learns to act in an environment
+			\item \textbf{Environment}: The system with which the agent interacts
+			\item  \textbf{Reward}: Feedback signal indicating the success of an action
 		\end{itemize}
-		\item Goal: Maximize cumulative rewards over time.
+		\item Goal: Maximize cumulative rewards over time
 	\end{itemize}
 	\centering
 	\includegraphics[scale=0.25]{rl_agent_env}
@@ -126,7 +126,7 @@
 \begin{frame}
 	\frametitle{Deep Q-Learning: Solution }
 	\vspace{0.5cm}
-	Use a \textbf{Deep Neural Network} (DNN) as a function approximator for $Q(s,a)$ instead of a table.
+	Use a \textbf{Deep Neural Network} (DNN) as a function approximator for $Q(s,a)$ instead of a table
 		\begin{itemize}		
 			\item  \textbf{Input}: State $s$, \textbf{Output}: Q-values for all actions $a$
 			\item \textbf{Target Network}: stabilizes training by holding fixed weights for a few updates
@@ -138,12 +138,12 @@
 \begin{frame}
 	\frametitle{Deep Q-Learning Algorithm }
 	\vspace{0.2cm}
-	Use a \textbf{Deep Neural Network} (DNN) as a function approximator for $Q(s,a)$ instead of a table.
+	Use a \textbf{Deep Neural Network} (DNN) as a function approximator for $Q(s,a)$ instead of a table
 		\begin{enumerate}		
 			\pause
 			\item Initialize: \\ Q-Network $Q(s,a;\theta)$ and Target Network $Q'(s,a;\theta^{-})$
 			\pause
-			\item Action Selection: \\ Use an $\epsilon-$ greedy policy to balance exploration vs. exploitation.
+			\item Action Selection: \\ Use an $\epsilon-$ greedy policy to balance exploration vs. exploitation
 			\pause
 			\item Store Experience: \\ Add $(s,a,r,s')$ to a replay buffer
 			\pause
@@ -164,9 +164,9 @@
 	\vspace{0.5cm}
 	Improvements:
 		\begin{itemize}		
-			\item \textbf{Double DQN}: Reduces overestimation of Q-values.
-			\item\textbf{Dueling DQN}: Separates value and advantage functions.
-			\item \textbf{Prioritized Experience Replay}: Samples important experiences more frequently.
+			\item \textbf{Double DQN}: Reduces overestimation of Q-values
+			\item\textbf{Dueling DQN}: Separates value and advantage functions
+			\item \textbf{Prioritized Experience Replay}: Samples important experiences more frequently
 		\end{itemize}
 	\pause
 	Applications:
@@ -202,10 +202,10 @@
 	\frametitle{Future Work}
 	\vspace{0.5cm}
 	\begin{itemize}
-		\item Fine-tuning the DQN model for improved decision-making.
-		\item Incorporating advanced techniques like Double DQN and Dueling DQN.
-		\item Testing against human players to evaluate real-world performance.
-		\item Extending the approach to other board games or strategy games (some side-projects).
+		\item Fine-tuning the DQN model for improved decision-making
+		\item Incorporating advanced techniques like Double DQN and Dueling DQN
+		\item Testing against human players to evaluate real-world performance
+		\item Extending the approach to other board games or strategy games (some side-projects)
 	\end{itemize}
 \end{frame}
 

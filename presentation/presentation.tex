@@ -45,13 +45,19 @@
 \input{./Ressourcen/Praesentation/Anfang.tex} % !!! NICHT ENTFERNEN !!!
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-
+\graphicspath{ {Ressourcen/_Bilder/} }
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % FOLIENSTIL: Standard
 \PraesentationMasterStandard
 
 \PraesentationTitelseite % Fügt die Startseite ein
 
+\begin{frame}
+	\frametitle{Introduction}
+	\vspace{1cm}
+	\centering
+	\includegraphics[scale=0.1]{appleNYC}
+\end{frame}
 
 \begin{frame}
 	\frametitle{Introduction}
@@ -61,12 +67,14 @@
 		\item The objective of the project is to create an AI player using reinforcement learning.
 		\item Techniques: Q-learning and Deep Q-Networks (DQN).
 	\end{itemize}
+	\centering
+	\includegraphics[scale=0.25]{checkers}
 \end{frame}
 
 
 \begin{frame}
 	\frametitle{What is Reinforcement Learning?}
-	\vspace{0.5cm}
+	\vspace{0.2cm}
 	\begin{itemize}
 		\item A machine learning paradigm focused on training agents to make sequences of decisions.
 		\item Key components:
@@ -77,6 +85,8 @@
 		\end{itemize}
 		\item Goal: Maximize cumulative rewards over time.
 	\end{itemize}
+	\centering
+	\includegraphics[scale=0.25]{rl_agent_env}
 \end{frame}
 
 
@@ -85,11 +95,27 @@
 \begin{frame}
 	\frametitle{Deep Q-Learning}
 	\vspace{0.5cm}
-		\begin{itemize}		
-			\item reinforcement learning technique to find the optimal action-value function \texttt{Q(s,a)}
+		\begin{itemize}	
+			\item reinforcement learning technique to find the optimal action-value function $Q(s,a)$
 			\item It maps state-action pairs to their expected future rewards
-			\item Q-Update rule: $$Q(s,a) = Q(s,a) +  \alpha [r + \gamma  \ max_{a'} \ Q(s',a') - Q(s,a)]$$
 		\end{itemize}
+		 \centering
+		\includegraphics[scale=0.15]{dqn_checkers}
+		% Q-Update rule: % $$Q(s,a) = Q(s,a) +  \alpha [r + \gamma  \ max_{a'} \ Q(s',a') - Q(s,a)]$$
+			
+\end{frame}
+
+\begin{frame}
+	\frametitle{Deep Q-Learning: Q-update rule}
+	\vspace{1cm}
+		
+			
+		$$Q^{\text{new}}(s_t, a_t) \leftarrow Q(s_t, a_t) 
+		+ \underbrace{\alpha}_{\text{learning rate}} \cdot 
+		\overbrace{\left( r_t + \underbrace{\gamma}_{\text{discount factor}} 
+		\cdot \underbrace{\max_a Q(s_{t+1}, a)}_{\text{estimate of optimal future value}} 
+		- \underbrace{Q(s_t, a_t)}_{\text{old value}} \right)}^{\text{temporal difference}}$$
+		
 		\vspace{1cm}
 		\pause
 		\centering
@@ -109,7 +135,7 @@
 
 
 \begin{frame}
-	\frametitle{Deep Q-Learning Workflow }
+	\frametitle{Deep Q-Learning Algorithm }
 	\vspace{0.2cm}
 	Use a \textbf{Deep Neural Network} (DNN) as a function approximator for $Q(s,a)$ instead of a table.
 		\begin{enumerate}		
@@ -124,7 +150,7 @@
 				\begin{itemize} 
 					 \item sample a minibatch from the buffer
 					 \item Compute target Q-values: $y = r + \gamma \ max_{a'} \ Q'(s',a';\theta^{-})$
-					\item Minimize loss: $L(\theta)=(y-Q(s,a,;\theta))^2$
+					\item Minimize loss: $L(\theta)=(y-Q(s,a;\theta))^2$
 				\end{itemize}
 			\pause
 			\item Update Target Network: \\ Periodically copy weights: $\theta^{-} \leftarrow \theta$
@@ -151,8 +177,25 @@
 \end{frame}
 
 
+% Planning and Timeline
 
-% This slide will be before Conc, planning, and project timeline. 
+\begin{frame}
+	\frametitle{Project Planning \& Timeline}
+	\vspace{0.2cm}
+	\includegraphics[scale=0.45]{project-plan}
+\end{frame}
+
+\begin{frame}
+	\frametitle{Software Stack}
+	\vspace{1cm}
+	\begin{itemize}
+		\item Python
+		\item numpy (for matrix calculations)
+		\item pygame (fast UI)
+		\item Web frameworks
+		\item tensorflow (for ML implementation)
+	\end{itemize}	
+\end{frame}
 
 \begin{frame}
 	\frametitle{Future Work}
@@ -165,28 +208,13 @@
 	\end{itemize}
 \end{frame}
 
-% Planning and Timeline
 
 \begin{frame}
-	\frametitle{Project Planning \& Tiimeline}
-	\vspace{0.5cm}
-	\begin{itemize}
-		\item Iterative Development: 4 sprints $\rightarrow$ 4 weeks
-		\item TODO: insert image here
-	\end{itemize}
-\end{frame}
-
-\PraesentationMasterWeissBlau
-\begin{frame}
-    \PraesentationUeberschriftZweizeilig{1.}{%
-         Introduction }
-\end{frame}
-\PraesentationMasterStandard
-
-\begin{frame}
-    \frametitle{title}
-    \vspace{0.5cm}
-    lorem ipsum
+	\frametitle{Thank You}
+	\vspace{1cm}
+	\centering
+	\includegraphics{efficiency} \\
+	xkcd 1445
 \end{frame}
 
 % add here

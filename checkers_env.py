@@ -1,6 +1,13 @@
 
 import numpy as np
 
+# Helper methods
+def in_board(row, col):
+    return 0 <= row < 6 and 0 <= col < 6
+
+def board_pos_empty(board, row, col):
+    return board[row, col] == 0
+
 
 class checkers_env:
 
@@ -34,7 +41,44 @@ class checkers_env:
         '''
         A possible format could be [start_row, start_col, end_row, end_col], there are normal moves and moves with capture. Pieces could be king or normal.
         '''
+        possible_moves = []
 
+        for row in range(6):
+            for col in range(6):
+                piece = self.board[row, col]
+
+                if piece == player or piece == 2 * player:
+                    if piece == player:
+                        if player == 1:
+                            # Player is top side
+                            directions = [(1, -1), (1, 1)]
+                        else:
+                            # Player is bottom side
+                            directions = [(-1, -1), (-1, 1)]
+                    else:
+                        # Player is King
+                        directions = [(-1, -1), (-1, 1), (1, -1), (1, 1)]
+
+                    for drow, dcol in directions:
+                        next_row = row + drow
+                        next_col = col + dcol
+
+                        # Check if next is within the board
+                        if in_board(next_row, next_col):
+                            target = self.board[next_row, next_col]
+
+                            if target == 0:
+                                # If target spot is empty
+                                possible_moves.append([row, col, next_row, next_col])
+                            else:
+                                # Check if target is opponent
+                                if (target != 0) and (np.sign(target) != np.sign(piece)):
+                                    jump_row = next_row + drow
+                                    jump_col = next_col + dcol
+
+                                    if in_board(jump_row, jump_col) and board_pos_empty(self.board, jump_row, jump_col):
+                                        possible_moves.append([row, col, jump_row, jump_col])
+        return possible_moves
 
     def capture_piece(self, action):
         '''
@@ -54,6 +98,7 @@ class checkers_env:
         '''
         The transition of board and incurred reward after player performs an action. Be careful about King
         '''
+        reward = 0 # change
 
         return [self.board, reward]
 

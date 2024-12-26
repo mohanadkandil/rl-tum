@@ -84,6 +84,7 @@ class checkers_env:
         """
         Assign 0 to the positions of captured pieces.
         We define `action` as [start_row, start_col, end_row, end_col]
+        TODO: check if the action is a capture move, return boolean
         """
         start_row, start_col, end_row, end_col = action
 
@@ -110,10 +111,26 @@ def game_winner(self, board):
 
 
 def step(self, action, player):
-    """
-    The transition of board and incurred reward after player performs an action. Be careful about King
-    """
-    reward = 0 # change
+    start_row, start_col, end_row, end_col = action
+    reward = 0
+
+    if action in self.valid_moves(player):
+        self.board[start_row][start_col] = 0
+        self.board[end_row][end_col] = player
+
+        # Check for Kind
+        if player == 1 and end_row == 5:
+            self.board[end_row][end_col] = 2
+        elif player == -1 and end_row == 0:
+            self.board[end_row][end_col] = -2
+
+        if self.capture_piece(action):
+            reward = 1
+
+        if self.game_winner(self.board) == player:
+            reward = 10
+    else:
+        raise ValueError("Invalid move")
 
     return [self.board, reward]
 

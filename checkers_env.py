@@ -38,9 +38,9 @@ class checkers_env:
 
 
     def valid_moves(self, player):
-        '''
+        """
         A possible format could be [start_row, start_col, end_row, end_col], there are normal moves and moves with capture. Pieces could be king or normal.
-        '''
+        """
         possible_moves = []
 
         for row in range(6):
@@ -81,10 +81,10 @@ class checkers_env:
         return possible_moves
 
     def capture_piece(self, action):
-        '''
+        """
         Assign 0 to the positions of captured pieces.
         We define `action` as [start_row, start_col, end_row, end_col]
-        '''
+        """
         start_row, start_col, end_row, end_col = action
 
         # Calculate the position of the captured piece
@@ -94,15 +94,15 @@ class checkers_env:
         self.board[captured_row][captured_col] = 0
 
 def game_winner(self, board):
-        '''
-        return player 1 win or player -1 win or draw
-        '''
+    """
+    return player 1 win or player -1 win or draw
+    """
 
 
 def step(self, action, player):
-    '''
+    """
     The transition of board and incurred reward after player performs an action. Be careful about King
-    '''
+    """
     reward = 0 # change
 
     return [self.board, reward]

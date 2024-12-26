@@ -83,36 +83,41 @@ class checkers_env:
     def capture_piece(self, action):
         '''
         Assign 0 to the positions of captured pieces.
+        We define `action` as [start_row, start_col, end_row, end_col]
         '''
-        
+        start_row, start_col, end_row, end_col = action
 
-    
-    def game_winner(self, board):
+        # Calculate the position of the captured piece
+        captured_row = (start_row + end_row) // 2
+        captured_col = (start_col + end_col) // 2
 
+        self.board[captured_row][captured_col] = 0
+
+def game_winner(self, board):
         '''
         return player 1 win or player -1 win or draw
         '''
 
 
-    def step(self, action, player):
-        '''
-        The transition of board and incurred reward after player performs an action. Be careful about King
-        '''
-        reward = 0 # change
+def step(self, action, player):
+    '''
+    The transition of board and incurred reward after player performs an action. Be careful about King
+    '''
+    reward = 0 # change
 
-        return [self.board, reward]
+    return [self.board, reward]
 
-    
-    def render(self):
-        for row in self.board:
-            for square in row:
-                if square == 1:
-                    piece = "|0"
-                elif square == -1:
-                    piece = "|X"
-                elif square == 2:
-                    piece = "|K"
-                else:
-                    piece = "| "
-                print(piece, end='')
-            print("|")
+
+def render(self):
+    for row in self.board:
+        for square in row:
+            if square == 1:
+                piece = "|0"
+            elif square == -1:
+                piece = "|X"
+            elif square == 2:
+                piece = "|K"
+            else:
+                piece = "| "
+            print(piece, end='')
+        print("|")

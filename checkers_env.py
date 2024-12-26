@@ -97,6 +97,16 @@ def game_winner(self, board):
     """
     return player 1 win or player -1 win or draw
     """
+    if np.sum(board < 0) == 0:
+        return 1
+    elif np.sum(board > 0) == 0:
+        return -1
+    elif len(self.valid_moves(-1)) == 0:
+        return -1
+    elif len(self.valid_moves(1)) == 0:
+        return 1
+    else:
+        return 0
 
 
 def step(self, action, player):

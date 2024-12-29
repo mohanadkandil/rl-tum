@@ -84,7 +84,7 @@ class checkers_env:
         """
         Assign 0 to the positions of captured pieces.
         We define `action` as [start_row, start_col, end_row, end_col]
-        TODO: check if the action is a capture move, return boolean
+        Also check if the action is a capture move, return boolean
         """
         start_row, start_col, end_row, end_col = action
 
@@ -92,7 +92,11 @@ class checkers_env:
         captured_row = (start_row + end_row) // 2
         captured_col = (start_col + end_col) // 2
 
-        self.board[captured_row][captured_col] = 0
+        if self.board[captured_row][captured_col] == 0:
+            return False
+        else:
+            self.board[captured_row][captured_col] = 0
+            return True
 
 def game_winner(self, board):
     """

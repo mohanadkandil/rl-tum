@@ -102,10 +102,11 @@ class checkers_env:
         reward = 0
 
         if action in self.valid_moves(player):
+            piece = self.board[start_row][start_col]
             self.board[start_row][start_col] = 0
-            self.board[end_row][end_col] = player
+            self.board[end_row][end_col] = piece
 
-            # Check for King
+            # Check for King promotion
             if player == 1 and end_row == 5:
                 self.board[end_row][end_col] = 2
             elif player == -1 and end_row == 0:
@@ -119,7 +120,9 @@ class checkers_env:
         else:
             raise ValueError("Invalid move")
 
-        return [self.board, reward]
+        self.render()
+
+        return [self.board, reward, []]  # TODO: Implement additional moves
 
     def game_winner(self, board):
         """
@@ -137,6 +140,7 @@ class checkers_env:
             return 0
 
     def render(self):
+        print("\n", end='')
         for row in self.board:
             for square in row:
                 if square == 1:

@@ -47,7 +47,6 @@ def draw_board(screen, board, valid_moves=[]):
 
 def main():
     env = checkers_env()
-    board = env.board
     clock = pygame.time.Clock()
     run = True
     selected_piece = None
@@ -61,7 +60,7 @@ def main():
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 pos = pygame.mouse.get_pos()
                 row, col = pos[1] // SQUARE_SIZE, pos[0] // SQUARE_SIZE
-                piece = board[row][col]
+                piece = env.board[row][col]
                 if selected_piece:
                     if (row, col) == selected_piece:
                         selected_piece = None
@@ -73,8 +72,8 @@ def main():
                     else:
                         for move in valid_moves:
                             if move[2] == row and move[3] == col:
-                                env.step(move, player_turn)
-                                if not env.capture_piece(move):
+                                env.board, reward, additional_moves = env.step(move, player_turn)
+                                if not additional_moves:
                                     player_turn = -player_turn
                                 selected_piece = None
                                 valid_moves = []
@@ -85,7 +84,7 @@ def main():
                         valid_moves = env.valid_moves(player_turn)
                         valid_moves = [move for move in valid_moves if move[0] == row and move[1] == col]
 
-        draw_board(screen, board, valid_moves)
+        draw_board(screen, env.board, valid_moves)
         pygame.display.flip()
         clock.tick(60)
 

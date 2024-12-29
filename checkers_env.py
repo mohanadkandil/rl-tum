@@ -114,6 +114,12 @@ class checkers_env:
 
             if self.capture_piece(action):
                 reward = 1
+                # Check for additional capture moves from the new position
+                additional_moves = self.valid_moves(player)
+                additional_moves = [move for move in additional_moves if
+                                    move[0] == end_row and move[1] == end_col and abs(move[2] - move[0]) == 2]
+                if additional_moves:
+                    return [self.board, reward, additional_moves]
 
             if self.game_winner(self.board) == player:
                 reward = 10
@@ -122,7 +128,7 @@ class checkers_env:
 
         self.render()
 
-        return [self.board, reward, []]  # TODO: Implement additional moves
+        return [self.board, reward, []]
 
     def game_winner(self, board):
         """

@@ -92,63 +92,70 @@ class checkers_env:
         captured_row = (start_row + end_row) // 2
         captured_col = (start_col + end_col) // 2
 
-        if self.board[captured_row][captured_col] == 0:
-            return False
-        else:
+        if abs(start_row - end_row) == 2 and self.board[captured_row][captured_col] != 0:
             self.board[captured_row][captured_col] = 0
             return True
+        return False
 
-def game_winner(self, board):
-    """
-    return player 1 win or player -1 win or draw
-    """
-    if np.sum(board < 0) == 0:
-        return 1
-    elif np.sum(board > 0) == 0:
-        return -1
-    elif len(self.valid_moves(-1)) == 0:
-        return -1
-    elif len(self.valid_moves(1)) == 0:
-        return 1
-    else:
-        return 0
+    def step(self, action, player):
+        start_row, start_col, end_row, end_col = action
+        reward = 0
 
+        if action in self.valid_moves(player):
+            piece = self.board[start_row][start_col]
+            self.board[start_row][start_col] = 0
+            self.board[end_row][end_col] = piece
 
-def step(self, action, player):
-    start_row, start_col, end_row, end_col = action
-    reward = 0
+            # Check for King promotion
+            if player == 1 and end_row == 5:
+                self.board[end_row][end_col] = 2
+            elif player == -1 and end_row == 0:
+                self.board[end_row][end_col] = -2
 
-    if action in self.valid_moves(player):
-        self.board[start_row][start_col] = 0
-        self.board[end_row][end_col] = player
+            if self.capture_piece(action):
+                reward = 1
+                # Check for additional capture moves from the new position
+                additional_moves = self.valid_moves(player)
+                additional_moves = [move for move in additional_moves if
+                                    move[0] == end_row and move[1] == end_col and abs(move[2] - move[0]) == 2]
+                if additional_moves:
+                    return [self.board, reward, additional_moves]
 
-        # Check for Kind
-        if player == 1 and end_row == 5:
-            self.board[end_row][end_col] = 2
-        elif player == -1 and end_row == 0:
-            self.board[end_row][end_col] = -2
+            if self.game_winner(self.board) == player:
+                reward = 10
+        else:
+            raise ValueError("Invalid move")
 
-        if self.capture_piece(action):
-            reward = 1
+        self.render()
 
-        if self.game_winner(self.board) == player:
-            reward = 10
-    else:
-        raise ValueError("Invalid move")
+        return [self.board, reward, []]
 
-    return [self.board, reward]
+    def game_winner(self, board):
+        """
+        return player 1 win or player -1 win or draw
+        """
+        if np.sum(board < 0) == 0:
+            return 1
+        elif np.sum(board > 0) == 0:
+            return -1
+        elif len(self.valid_moves(-1)) == 0:
+            return -1
+        elif len(self.valid_moves(1)) == 0:
+            return 1
+        else:
+            return 0
 
-
-def render(self):
-    for row in self.board:
-        for square in row:
-            if square == 1:
-                piece = "|0"
-            elif square == -1:
-                piece = "|X"
-            elif square == 2:
-                piece = "|K"
-            else:
-                piece = "| "
-            print(piece, end='')
-        print("|")
+    def render(self):
+        print("\n", end='')
+        for row in self.board:
+            for square in row:
+                if square == 1:
+                    piece = "|0"
+                elif square == -1:
+                    piece = "|X"
+                elif square == 2:
+                    piece = "|K"
+                else:
+                    piece = "| "
+                print(piece, end='')
+            print("|")

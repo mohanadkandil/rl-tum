@@ -1,4 +1,3 @@
-
 import numpy as np
 
 # Helper methods
@@ -119,6 +118,9 @@ class checkers_env:
                 additional_moves = [move for move in additional_moves if
                                     move[0] == end_row and move[1] == end_col and abs(move[2] - move[0]) == 2]
                 if additional_moves:
+                    # Add position evaluation to the reward
+                    position_value = self.agent.evaluation(self.board)
+                    reward += position_value * 0.01  # Scale the position value
                     return [self.board, reward, additional_moves]
 
             if self.game_winner(self.board) == player:

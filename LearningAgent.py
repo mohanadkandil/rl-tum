@@ -11,15 +11,14 @@ class LearningAgent:
 
     def __init__(self, step_size, epsilon, env):
         '''
-        :param step_size:
-        :param epsilon:
-        :param env:
+        :param step_size: Learning rate
+        :param epsilon: Exploration rate
+        :param env: Checkers environment
         '''
-
-        self.step_size = step_size  # Learning rate
-        self.epsilon = epsilon      # Exploration rate
+        self.step_size = step_size
+        self.epsilon = epsilon
         self.env = env
-        
+        self.gamma = 0.99  # Add discount factor here
         self.q_table = {}
 
     def get_state_key(self, state):
@@ -37,18 +36,20 @@ class LearningAgent:
     
     def select_action(self):
         """Select action using epsilon-greedy strategy"""
-        if np.random.random() < self.epsilon:
-            valid_moves = self.env.valid_moves(self.env.player)
-            if not valid_moves:
-                return None
-            return valid_moves[np.random.randint(len(valid_moves))]
-        
+        # Get valid moves for the current player
         valid_moves = self.env.valid_moves(self.env.player)
+        
+        # If no valid moves available
         if not valid_moves:
             return None
-            
-        q_values = [self.get_q_value(self.env.board, action) for action in valid_moves]
         
+        # Epsilon-greedy selection
+        if np.random.random() < self.epsilon:
+            # Explore: random action from valid moves
+            return valid_moves[np.random.randint(len(valid_moves))]
+        
+        # Exploit: choose best known action from valid moves
+        q_values = [self.get_q_value(self.env.board, action) for action in valid_moves]
         max_q_index = np.argmax(q_values)
         return valid_moves[max_q_index]
     
@@ -69,80 +70,41 @@ class LearningAgent:
         else:
             max_next_q = 0
         
-        # Q-learning update formula
-        new_q = current_q + self.step_size * (reward + GAMMA * max_next_q - current_q)
+        # Q-learning update formula using self.gamma instead of GAMMA
+        new_q = current_q + self.step_size * (reward + self.gamma * max_next_q - current_q)
         
         # Update Q-table
         state_key = self.get_state_key(state)
         self.q_table[state_key][str(action)] = new_q
 
     def evaluation(self, board):
-        '''
-        Evaluate the current board state for international checkers (6x6 board).
-        Returns a score indicating how favorable the position is.
+        """
+        Evaluate board position for American checkers
+        Returns a score indicating how favorable the position is
+        """
+        # Count pieces and kings
+        player_pieces = np.sum(board == self.env.player)
+        player_kings = np.sum(board == self.env.player * 2)
+        opponent_pieces = np.sum(board == -self.env.player)
+        opponent_kings = np.sum(board == -self.env.player * 2)
         
-        Key differences from American checkers:
-        1. Pieces can move backwards even when not kings
-        2. Kings have longer range movement
-        3. Forced capture rules are stricter
-        4. Different initial setup
-        '''
-        
-        # Count regular pieces and kings for both players
-        player_pieces = 0
-        opponent_pieces = 0
-        player_kings = 0
-        opponent_kings = 0
-        
-        # Mobility scores (count possible moves)
+        # Count mobility (available moves)
         player_mobility = len(self.env.valid_moves(self.env.player))
         opponent_mobility = len(self.env.valid_moves(-self.env.player))
         
-        # Control of key squares (diagonals and center)
-        key_squares = [
-            (1,1), (1,3), (1,5),  
-            (2,2), (2,3), (3,2), (3,3),  
-            (4,1), (4,3), (4,5)  
-        ]
-        player_key_squares = 0
-        opponent_key_squares = 0
+        # Control of center squares (more valuable)
+        center_squares = [(3,3), (3,4), (4,3), (4,4)]
+        player_center = sum(1 for r, c in center_squares 
+                           if board[r][c] in [self.env.player, self.env.player * 2])
+        opponent_center = sum(1 for r, c in center_squares 
+                             if board[r][c] in [-self.env.player, -self.env.player * 2])
         
-        # Evaluate each position on the board
-        for row in range(6):
-            for col in range(6):
-                piece = board[row][col]
-                
-                if piece != 0:  # If square is not empty
-                    # Count pieces and kings
-                    if piece == self.env.player:
-                        if abs(piece) == 1:
-                            player_pieces += 1
-                        else:
-                            player_kings += 1
-                            
-                    elif piece == -self.env.player:
-                        if abs(piece) == 1:
-                            opponent_pieces += 1
-                        else:
-                            opponent_kings += 1
-                    
-                    # Count control of key squares
-                    if (row, col) in key_squares:
-                        if piece == self.env.player:
-                            player_key_squares += 1
-                        elif piece == -self.env.player:
-                            opponent_key_squares += 1
-        
-        # Calculate final score with weights adjusted for international rules
+        # Calculate weighted score
         piece_score = (player_pieces - opponent_pieces) * 100
-        king_score = (player_kings - opponent_kings) * 300  
-        mobility_score = (player_mobility - opponent_mobility) * 30  
-        position_score = (player_key_squares - opponent_key_squares) * 50
+        king_score = (player_kings - opponent_kings) * 200
+        mobility_score = (player_mobility - opponent_mobility) * 30
+        center_score = (player_center - opponent_center) * 50
         
-        king_bonus = 0
-        if player_kings > opponent_kings:
-            king_bonus = 100
-        
-        total_score = piece_score + king_score + mobility_score + position_score + king_bonus
+        total_score = piece_score + king_score + mobility_score + center_score
         
         return total_score

@@ -10,154 +10,211 @@ def board_pos_empty(board, row, col):
 
 class checkers_env:
 
-    def __init__(self, board=None, player=None):
-
+    def __init__(self, board_size=6):  # Default to 6x6
+        self.board_size = board_size
         self.board = self.initialize_board()
-        self.player = 1
+        self.player = 1  # 1 for red (top), -1 for white (bottom)
+        self.selected_piece = None
 
 
     def initialize_board(self):
-        board = np.array([[1, 0, 1, 0, 1, 0],
-                      [0, 1, 0, 1, 0, 1],
-                      [0, 0, 0, 0, 0, 0],
-                      [0, 0, 0, 0, 0, 0],
-                      [-1, 0, -1, 0, -1, 0],
-                      [0, -1, 0, -1, 0, -1]])
+        """Initialize board for checkers"""
+        board = np.zeros((self.board_size, self.board_size))
+        
+        # Set up red pieces (player 1)
+        for row in range(2):  # Only 2 rows for 6x6
+            for col in range(self.board_size):
+                if (row + col) % 2 == 1:
+                    board[row][col] = 1
+                    
+        # Set up white pieces (player -1)
+        for row in range(self.board_size - 2, self.board_size):  # Only 2 rows for 6x6
+            for col in range(self.board_size):
+                if (row + col) % 2 == 1:
+                    board[row][col] = -1
+                    
         return board
 
 
     def reset(self):
-        self.board = np.array([[1, 0, 1, 0, 1, 0],
-                      [0, 1, 0, 1, 0, 1],
-                      [0, 0, 0, 0, 0, 0],
-                      [0, 0, 0, 0, 0, 0],
-                      [-1, 0, -1, 0, -1, 0],
-                      [0, -1, 0, -1, 0, -1]])
+        """Reset the game to initial state"""
+        self.board = self.initialize_board()
         self.player = 1
+        return self.board
 
 
     def valid_moves(self, player):
-        """
-        A possible format could be [start_row, start_col, end_row, end_col], there are normal moves and moves with capture. Pieces could be king or normal.
-        """
-        possible_moves = []
+        """Get all valid moves for current player"""
+        moves = []
+        capture_moves = []  # Separate list for capture moves
 
-        for row in range(6):
-            for col in range(6):
-                piece = self.board[row, col]
+        for row in range(self.board_size):
+            for col in range(self.board_size):
+                piece = self.board[row][col]
+                if piece == player or piece == player * 2:  # Regular piece or king
+                    # Check all possible moves for this piece
+                    piece_moves = self._get_piece_moves(row, col, player)
+                    piece_captures = self._get_piece_captures(row, col, player)
+                    
+                    moves.extend(piece_moves)
+                    capture_moves.extend(piece_captures)
+        
+        # If captures available, only return captures (forced capture rule)
+        return capture_moves if capture_moves else moves
 
-                if piece == player or piece == 2 * player:
-                    if piece == player:
-                        if player == 1:
-                            # Player is top side
-                            directions = [(1, -1), (1, 1)]
-                        else:
-                            # Player is bottom side
-                            directions = [(-1, -1), (-1, 1)]
-                    else:
-                        # Player is King
-                        directions = [(-1, -1), (-1, 1), (1, -1), (1, 1)]
+    def _get_piece_moves(self, row, col, player):
+        """Get regular moves for a piece"""
+        moves = []
+        piece = self.board[row][col]
+        directions = []
+        
+        # Regular pieces can only move forward
+        if piece == 1:  # Red moves down
+            directions = [(1, -1), (1, 1)]
+        elif piece == -1:  # White moves up
+            directions = [(-1, -1), (-1, 1)]
+        # Kings can move in all directions
+        elif abs(piece) == 2:
+            directions = [(1, -1), (1, 1), (-1, -1), (-1, 1)]
 
-                    for drow, dcol in directions:
-                        next_row = row + drow
-                        next_col = col + dcol
+        for dr, dc in directions:
+            new_row, new_col = row + dr, col + dc
+            if self._is_valid_pos(new_row, new_col) and self.board[new_row][new_col] == 0:
+                moves.append([row, col, new_row, new_col])
+                
+        return moves
 
-                        # Check if next is within the board
-                        if in_board(next_row, next_col):
-                            target = self.board[next_row, next_col]
+    def _get_piece_captures(self, row, col, player):
+        """Get capture moves for a piece"""
+        captures = []
+        piece = self.board[row][col]
+        directions = []
+        
+        if piece == 1 or abs(piece) == 2:
+            directions.extend([(1, -1), (1, 1)])
+        if piece == -1 or abs(piece) == 2:
+            directions.extend([(-1, -1), (-1, 1)])
 
-                            if target == 0:
-                                # If target spot is empty
-                                possible_moves.append([row, col, next_row, next_col])
-                            else:
-                                # Check if target is opponent
-                                if (target != 0) and (np.sign(target) != np.sign(piece)):
-                                    jump_row = next_row + drow
-                                    jump_col = next_col + dcol
+        for dr, dc in directions:
+            jump_row, jump_col = row + 2*dr, col + 2*dc
+            if self._is_valid_pos(jump_row, jump_col):
+                middle_row, middle_col = row + dr, col + dc
+                if (self.board[middle_row][middle_col] == -player or 
+                    self.board[middle_row][middle_col] == -player * 2):
+                    if self.board[jump_row][jump_col] == 0:
+                        captures.append([row, col, jump_row, jump_col])
+        
+        return captures
 
-                                    if in_board(jump_row, jump_col) and board_pos_empty(self.board, jump_row, jump_col):
-                                        possible_moves.append([row, col, jump_row, jump_col])
-        return possible_moves
-
-    def capture_piece(self, action):
-        """
-        Assign 0 to the positions of captured pieces.
-        We define `action` as [start_row, start_col, end_row, end_col]
-        Also check if the action is a capture move, return boolean
-        """
-        start_row, start_col, end_row, end_col = action
-
-        # Calculate the position of the captured piece
-        captured_row = (start_row + end_row) // 2
-        captured_col = (start_col + end_col) // 2
-
-        if abs(start_row - end_row) == 2 and self.board[captured_row][captured_col] != 0:
-            self.board[captured_row][captured_col] = 0
-            return True
-        return False
+    def _is_valid_pos(self, row, col):
+        """Check if position is within board"""
+        return 0 <= row < self.board_size and 0 <= col < self.board_size
 
     def step(self, action, player):
-        start_row, start_col, end_row, end_col = action
-        reward = 0
-
-        if action in self.valid_moves(player):
+        """Execute move and return new state, reward, and additional moves"""
+        try:
+            # Validate action format
+            if action is None or len(action) != 4:
+                print(f"Invalid action format: {action}")
+                return self.board, -1, []
+            
+            start_row, start_col, end_row, end_col = action
+            
+            # Get valid moves for current player
+            valid_moves = self.valid_moves(player)
+            
+            # Debug information
+            if action not in valid_moves:
+                print(f"Invalid move: {action}")
+                print(f"Valid moves: {valid_moves}")
+                print(f"Current player: {player}")
+                print(f"Current board state:")
+                self.render()
+                return self.board, -1, []
+            
             piece = self.board[start_row][start_col]
+            reward = 0
+            
+            # Move piece
             self.board[start_row][start_col] = 0
             self.board[end_row][end_col] = piece
-
-            # Check for King promotion
-            if player == 1 and end_row == 5:
-                self.board[end_row][end_col] = 2
-            elif player == -1 and end_row == 0:
-                self.board[end_row][end_col] = -2
-
-            if self.capture_piece(action):
-                reward = 1
-                # Check for additional capture moves from the new position
-                additional_moves = self.valid_moves(player)
-                additional_moves = [move for move in additional_moves if
-                                    move[0] == end_row and move[1] == end_col and abs(move[2] - move[0]) == 2]
-                if additional_moves:
-                    # Add position evaluation to the reward
-                    position_value = self.agent.evaluation(self.board)
-                    reward += position_value * 0.01  # Scale the position value
-                    return [self.board, reward, additional_moves]
-
-            if self.game_winner(self.board) == player:
-                reward = 10
-        else:
-            raise ValueError("Invalid move")
-
-        self.render()
-
-        return [self.board, reward, []]
+            
+            # Handle capture
+            if abs(start_row - end_row) == 2:
+                mid_row = (start_row + end_row) // 2
+                mid_col = (start_col + end_col) // 2
+                self.board[mid_row][mid_col] = 0
+                reward += 1.0
+            
+            # King promotion
+            if (player == 1 and end_row == self.board_size - 1) or (player == -1 and end_row == 0):
+                self.board[end_row][end_col] = player * 2
+                reward += 2.0
+            
+            # Position rewards
+            if player == 1:
+                reward += end_row * 0.05
+            else:
+                reward += (self.board_size - 1 - end_row) * 0.05
+            
+            # Center control
+            if self.board_size//3 <= end_row <= 2*self.board_size//3 and \
+               self.board_size//3 <= end_col <= 2*self.board_size//3:
+                reward += 0.1
+            
+            # Win/Loss rewards
+            winner = self.game_winner(self.board)
+            if winner == player:
+                reward += 5.0
+            elif winner == -player:
+                reward -= 5.0
+            
+            # Check for additional captures
+            additional_moves = []
+            if abs(start_row - end_row) == 2:
+                additional_moves = self._get_piece_captures(end_row, end_col, player)
+            
+            return self.board, reward, additional_moves
+        
+        except Exception as e:
+            print(f"Error in step method: {str(e)}")
+            print(f"Action: {action}")
+            print(f"Player: {player}")
+            print("Current board state:")
+            self.render()
+            return self.board, -1, []
 
     def game_winner(self, board):
-        """
-        return player 1 win or player -1 win or draw
-        """
-        if np.sum(board < 0) == 0:
+        """Check if game is won"""
+        red_pieces = np.sum(board > 0)
+        white_pieces = np.sum(board < 0)
+        
+        if white_pieces == 0:
             return 1
-        elif np.sum(board > 0) == 0:
-            return -1
-        elif len(self.valid_moves(-1)) == 0:
+        elif red_pieces == 0:
             return -1
         elif len(self.valid_moves(1)) == 0:
+            return -1
+        elif len(self.valid_moves(-1)) == 0:
             return 1
-        else:
-            return 0
+        return 0
 
     def render(self):
-        print("\n", end='')
-        for row in self.board:
-            for square in row:
-                if square == 1:
-                    piece = "|0"
-                elif square == -1:
-                    piece = "|X"
-                elif square == 2:
-                    piece = "|K"
-                else:
-                    piece = "| "
-                print(piece, end='')
-            print("|")
+        """Print current board state"""
+        print(f"\n  {''.join([str(i) + ' ' for i in range(self.board_size)])}")
+        for row in range(self.board_size):
+            print(f"{row}", end=" ")
+            for col in range(self.board_size):
+                piece = self.board[row][col]
+                if piece == 0:
+                    print(".", end=" ")
+                elif piece == 1:
+                    print("r", end=" ")
+                elif piece == -1:
+                    print("w", end=" ")
+                elif piece == 2:
+                    print("R", end=" ")
+                elif piece == -2:
+                    print("W", end=" ")
+            print()
+        print()

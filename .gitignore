@@ -1,0 +1,4 @@
+venv/
+venv_310/
+__pycache__/
+checkpoints/

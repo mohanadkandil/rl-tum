@@ -84,17 +84,20 @@ class DQNAgent:
         self.action_size = action_size
         self.memory = PriorityReplayBuffer(100000, 0.6)
         
+        # Training parameters
         self.gamma = 0.99
         self.epsilon = 1.0
-        self.epsilon_min = 0.01  
-        self.epsilon_decay = 0.995  
+        self.epsilon_min = 0.01
+        self.epsilon_decay = 0.995
         self.learning_rate = 0.0001
         self.batch_size = 64
         
+        # CUDA setup
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print(f"Using device: {self.device}")
         
         def create_network():
-            return nn.Sequential(
+            model = nn.Sequential(
                 nn.Linear(state_size, 512),
                 nn.ReLU(),
                 nn.Dropout(0.2),
@@ -102,13 +105,19 @@ class DQNAgent:
                 nn.ReLU(),
                 nn.Dropout(0.2),
                 nn.Linear(512, action_size)
-            ).to(self.device)
+            )
+            return model.to(self.device)  # Move model to GPU if available
         
         self.q_network = create_network()
         self.target_network = create_network()
         
-        self.target_network.load_state_dict(self.q_network.state_dict())
+        # Enable multi-GPU if available
+        if torch.cuda.device_count() > 1:
+            print(f"Using {torch.cuda.device_count()} GPUs!")
+            self.q_network = nn.DataParallel(self.q_network)
+            self.target_network = nn.DataParallel(self.target_network)
         
+        self.target_network.load_state_dict(self.q_network.state_dict())
         self.optimizer = optim.Adam(self.q_network.parameters(), lr=self.learning_rate)
         
         # Add priority replay parameters
@@ -138,13 +147,13 @@ class DQNAgent:
         return valid_moves[best_move_idx]
         
     def replay(self):
-        if len(self.memory.memory) < self.batch_size:
+        if len(self.memory) < self.batch_size:
             return
             
-        # Sample with priorities
         batch, indices, weights = self.memory.sample(self.batch_size, self.priority_beta)
         weights = torch.FloatTensor(weights).to(self.device)
         
+        # Move batch data to GPU
         states = torch.FloatTensor(np.vstack([s.flatten() for s, _, _, _, _ in batch])).to(self.device)
         next_states = torch.FloatTensor(np.vstack([ns.flatten() for _, _, _, ns, _ in batch])).to(self.device)
         
@@ -164,24 +173,19 @@ class DQNAgent:
             else:
                 target_value = reward + self.gamma * torch.max(next_q_values[i])
             
-            # Calculate TD error for priority update
             current_value = current_q_values[i][self.encode_action(action)]
             td_error = abs(target_value - current_value.item())
             td_errors.append(td_error)
             
             target[i][self.encode_action(action)] = target_value
         
-        # Calculate element-wise loss
         losses = F.mse_loss(current_q_values, target, reduction='none')
-        
-        # Apply weights to batch dimension only
         weighted_loss = (weights.unsqueeze(1) * losses.mean(dim=1)).mean()
         
         self.optimizer.zero_grad()
         weighted_loss.backward()
         self.optimizer.step()
         
-        # Update priorities
         self.memory.update_priorities(indices, td_errors)
         
         if self.epsilon > self.epsilon_min:

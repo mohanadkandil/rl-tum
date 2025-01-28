@@ -91,7 +91,15 @@ def train_agent(episodes=None):
     win_rates = []
     total_steps = 0
     
+    # Create checkpoints directory if it doesn't exist
+    checkpoint_dir = 'checkpoints'
+    if not os.path.exists(checkpoint_dir):
+        os.makedirs(checkpoint_dir)
+    
     print(f"Starting training for {episodes} episodes...")
+    best_win_rate = 0
+    best_model_path = os.path.join(checkpoint_dir, 'best_model.pth')
+    
     for episode in range(episodes):
         state = env.reset()
         episode_reward = 0
@@ -146,10 +154,39 @@ def train_agent(episodes=None):
             win_rate = evaluate_agent(agent, env)
             win_rates.append(win_rate)
             print(f"Episode {episode}/{episodes}, Win Rate: {win_rate:.2%}, Epsilon: {agent.epsilon:.3f}")
-
+            
+            # Save best model in checkpoints directory
+            if win_rate > best_win_rate:
+                best_win_rate = win_rate
+                print(f"New best win rate: {win_rate:.2%}!")
+                torch.save({
+                    'episode': episode,
+                    'model_state_dict': agent.q_network.state_dict(),
+                    'optimizer_state_dict': agent.optimizer.state_dict(),
+                    'win_rate': win_rate,
+                    'epsilon': agent.epsilon
+                }, best_model_path)
+    
+    # Save final model in checkpoints directory
+    final_model_path = os.path.join(checkpoint_dir, f'model_final_e{episodes}.pth')
+    torch.save({
+        'episode': episodes,
+        'model_state_dict': agent.q_network.state_dict(),
+        'optimizer_state_dict': agent.optimizer.state_dict(),
+        'win_rate': win_rates[-1],
+        'epsilon': agent.epsilon
+    }, final_model_path)
+    
+    # Save training plot in checkpoints directory
+    plot_path = os.path.join(checkpoint_dir, 'training_results.png')
+    plot_training_results(rewards, win_rates, eval_frequency, save_path=plot_path)
+    
+    print(f"Training complete! Best win rate: {best_win_rate:.2%}")
+    print(f"Models saved in {checkpoint_dir}/")
+    
     return agent, rewards, win_rates, eval_frequency
 
-def plot_training_results(rewards, win_rates, eval_frequency=50):
+def plot_training_results(rewards, win_rates, eval_frequency=50, save_path='training_results.png'):
     plt.figure(figsize=(12, 5))
     
     # Plot rewards
@@ -171,9 +208,28 @@ def plot_training_results(rewards, win_rates, eval_frequency=50):
     plt.ylabel('Win Rate')
     
     plt.tight_layout()
-    plt.savefig('training_results.png')
+    plt.savefig(save_path)
     plt.close()
 
+def load_trained_model(model_path):
+    """Load a trained model"""
+    agent = DQNAgent()  
+    
+    if os.path.exists(model_path):
+        checkpoint = torch.load(model_path, map_location=agent.device)
+        agent.q_network.load_state_dict(checkpoint['model_state_dict'])
+        agent.target_network.load_state_dict(checkpoint['model_state_dict'])
+        agent.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        agent.epsilon = checkpoint['epsilon']
+        
+        print(f"Loaded model from {model_path}")
+        print(f"Model win rate: {checkpoint['win_rate']:.2%}")
+        print(f"Model epsilon: {agent.epsilon:.3f}")
+    else:
+        print(f"No model found at {model_path}")
+    
+    return agent
+
 if __name__ == "__main__":
+    # Train new model
     trained_agent, rewards, win_rates, eval_frequency = train_agent()
-    plot_training_results(rewards, win_rates, eval_frequency) 

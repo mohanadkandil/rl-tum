@@ -5,6 +5,11 @@ from checkers_env import checkers_env
 # Initialize Pygame
 pygame.init()
 
+# Constants
+WIDTH, HEIGHT = 600, 600
+ROWS, COLS = 6, 6
+SQUARE_SIZE = WIDTH // COLS
+
 # Colors
 RED = (255, 0, 0)
 WHITE = (255, 255, 255)
@@ -12,103 +17,104 @@ BLACK = (0, 0, 0)
 GREY = (128, 128, 128)
 GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
+CROWN = pygame.transform.scale(pygame.image.load('crown.png'), (44, 25))
 
 class CheckersGUI:
-    def __init__(self, board_size=6):
-        self.board_size = board_size
-        self.window_size = 800
-        self.square_size = self.window_size // board_size
-        self.screen = pygame.display.set_mode((self.window_size, self.window_size))
+    def __init__(self):
+        self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
         pygame.display.set_caption('Checkers')
-        self.env = checkers_env(board_size=board_size)
+        self.env = checkers_env()
         self.selected_piece = None
         self.valid_moves = []
-        self.player_turn = 1
+        self.player_turn = -1  # Changed to -1 so human starts with white
         self.game_over = False
         self.winner = 0
-        self.font = pygame.font.Font(None, 74)  # For game over text
+        self.font = pygame.font.Font(None, 74)
 
     def draw_board(self):
         self.screen.fill(BLACK)
-        for row in range(self.board_size):
-            for col in range(row % 2, self.board_size, 2):
+        for row in range(ROWS):
+            for col in range(row % 2, COLS, 2):
                 pygame.draw.rect(self.screen, GREY, 
-                               (col * self.square_size, row * self.square_size, 
-                                self.square_size, self.square_size))
-
-    def draw_pieces(self):
-        for row in range(self.board_size):
-            for col in range(self.board_size):
+                               (col * SQUARE_SIZE, row * SQUARE_SIZE, 
+                                SQUARE_SIZE, SQUARE_SIZE))
+        for row in range(ROWS):
+            for col in range(COLS):
                 piece = self.env.board[row][col]
                 if piece != 0:
-                    # Calculate center of square
-                    x = col * self.square_size + self.square_size // 2
-                    y = row * self.square_size + self.square_size // 2
+                    if piece == 1:
+                        color = RED
+                    elif piece == -1:
+                        color = WHITE
+                    elif piece == 2:
+                        color = RED
+                    elif piece == -2:
+                        color = WHITE
+                    pygame.draw.circle(self.screen, color, (col * SQUARE_SIZE + SQUARE_SIZE // 2, row * SQUARE_SIZE + SQUARE_SIZE // 2), SQUARE_SIZE // 2 - 10)
+                    if piece == 2 or piece == -2:
+                        self.screen.blit(CROWN, (col * SQUARE_SIZE + SQUARE_SIZE // 2 - CROWN.get_width() // 2, row * SQUARE_SIZE + SQUARE_SIZE // 2 - CROWN.get_height() // 2))
+        for move in self.valid_moves:
+            pygame.draw.circle(self.screen, GREEN, 
+                             (move[3] * SQUARE_SIZE + SQUARE_SIZE // 2, 
+                              move[2] * SQUARE_SIZE + SQUARE_SIZE // 2), 
+                             8)
+
+    def draw_pieces(self):
+        for row in range(ROWS):
+            for col in range(COLS):
+                piece = self.env.board[row][col]
+                if piece != 0:
+                    x = col * SQUARE_SIZE + SQUARE_SIZE // 2
+                    y = row * SQUARE_SIZE + SQUARE_SIZE // 2
                     
-                    # Draw piece
                     if abs(piece) == 1:
                         color = RED if piece > 0 else WHITE
                         pygame.draw.circle(self.screen, color, (x, y), 
-                                         self.square_size // 2 - 10)
+                                         SQUARE_SIZE // 2 - 10)
                     else:  # King piece
                         color = RED if piece > 0 else WHITE
                         pygame.draw.circle(self.screen, color, (x, y), 
-                                         self.square_size // 2 - 10)
+                                         SQUARE_SIZE // 2 - 10)
                         pygame.draw.circle(self.screen, BLUE, (x, y), 
-                                         self.square_size // 4)
+                                         SQUARE_SIZE // 4)
 
     def draw_valid_moves(self):
         for move in self.valid_moves:
-            row, col = move[2], move[3]  # End position of move
-            x = col * self.square_size + self.square_size // 2
-            y = row * self.square_size + self.square_size // 2
-            pygame.draw.circle(self.screen, GREEN, (x, y), 15)
-
-    def draw_selected(self):
-        if self.selected_piece:
-            row, col = self.selected_piece
-            x = col * self.square_size + self.square_size // 2
-            y = row * self.square_size + self.square_size // 2
-            pygame.draw.circle(self.screen, GREEN, (x, y), 
-                             self.square_size // 2 - 10, 4)
+            row, col = move[2], move[3]  # End position
+            x = col * SQUARE_SIZE + SQUARE_SIZE // 2
+            y = row * SQUARE_SIZE + SQUARE_SIZE // 2
+            pygame.draw.circle(self.screen, GREEN, (x, y), 8)  # Reduced from 15 to 8
 
     def draw_game_over(self):
-        """Draw game over screen"""
         if self.game_over:
-            # Create semi-transparent overlay
-            overlay = pygame.Surface((self.window_size, self.window_size))
-            overlay.fill((0, 0, 0))
+            overlay = pygame.Surface((WIDTH, HEIGHT))
+            overlay.fill(BLACK)
             overlay.set_alpha(128)
             self.screen.blit(overlay, (0, 0))
             
-            # Create game over text
             winner_text = "Red Wins!" if self.winner == 1 else "White Wins!"
-            text = self.font.render(winner_text, True, (255, 215, 0))  # Gold color
-            
-            # Center the text
-            text_rect = text.get_rect(center=(self.window_size/2, self.window_size/2))
+            text = self.font.render(winner_text, True, (255, 215, 0))
+            text_rect = text.get_rect(center=(WIDTH/2, HEIGHT/2))
             self.screen.blit(text, text_rect)
             
-            # Add restart instruction
             restart_font = pygame.font.Font(None, 36)
-            restart_text = restart_font.render("Press R to Restart", True, (255, 255, 255))
-            restart_rect = restart_text.get_rect(center=(self.window_size/2, self.window_size/2 + 50))
+            restart_text = restart_font.render("Press R to Restart", True, WHITE)
+            restart_rect = restart_text.get_rect(center=(WIDTH/2, HEIGHT/2 + 50))
             self.screen.blit(restart_text, restart_rect)
 
     def update_display(self):
         self.draw_board()
         self.draw_pieces()
         self.draw_valid_moves()
-        self.draw_selected()
-        self.draw_game_over()  # Add game over overlay if game is over
+        self.draw_game_over()
         pygame.display.flip()
 
     def handle_click(self, pos):
         if self.game_over:
             return
 
-        row = pos[1] // self.square_size
-        col = pos[0] // self.square_size
+        row = pos[1] // SQUARE_SIZE
+        col = pos[0] // SQUARE_SIZE
         piece = self.env.board[row][col]
 
         if self.selected_piece:
@@ -141,7 +147,6 @@ class CheckersGUI:
                 if winner != 0:
                     self.game_over = True
                     self.winner = winner
-                    print(f"Player {winner} wins!")
             
             self.selected_piece = None
             self.valid_moves = []
@@ -149,7 +154,7 @@ class CheckersGUI:
         except ValueError as e:
             print(f"Invalid move: {e}")
 
-    def run(self):
+    def run(self, agent=None):
         clock = pygame.time.Clock()
         running = True
         
@@ -162,9 +167,17 @@ class CheckersGUI:
                     self.handle_click(pos)
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_r:  # Reset game
-                        self.__init__(self.board_size)
+                        self.__init__()
+                        self.player_turn = -1  # Reset to human's turn
                     elif event.key == pygame.K_q:  # Quit game
                         running = False
+
+            # AI move if it's AI's turn and we have an agent
+            if agent and self.player_turn == 1 and not self.game_over:  # Changed to 1 for red
+                valid_moves = self.env.valid_moves(1)  # AI plays as red (1)
+                if valid_moves:
+                    action = agent.act(self.env.board, valid_moves)
+                    self.make_move(action)
 
             self.update_display()
             clock.tick(60)
@@ -172,5 +185,5 @@ class CheckersGUI:
         pygame.quit()
 
 if __name__ == "__main__":
-    game = CheckersGUI()
-    game.run()
+    gui = CheckersGUI()
+    gui.run()

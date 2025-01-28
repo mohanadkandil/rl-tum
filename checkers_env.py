@@ -138,51 +138,47 @@ class checkers_env:
             # Move piece
             self.board[start_row][start_col] = 0
             self.board[end_row][end_col] = piece
-            
+
+            # Check for King promotion
+            if player == 1 and end_row == 5:
+                self.board[end_row][end_col] = 2
+                reward += 2.0  # Bonus for king promotion
+            elif player == -1 and end_row == 0:
+                self.board[end_row][end_col] = -2
+                reward += 2.0  # Bonus for king promotion
+
             # Handle capture
             if abs(start_row - end_row) == 2:
                 mid_row = (start_row + end_row) // 2
                 mid_col = (start_col + end_col) // 2
                 self.board[mid_row][mid_col] = 0
-                reward += 1.0
-            
-            # King promotion
-            if (player == 1 and end_row == self.board_size - 1) or (player == -1 and end_row == 0):
-                self.board[end_row][end_col] = player * 2
-                reward += 2.0
-            
-            # Position rewards
+                reward += 1.0  # Bonus for capturing piece
+                
+                # Check for additional capture moves
+                additional_moves = self.valid_moves(player)
+                additional_moves = [move for move in additional_moves if
+                                  move[0] == end_row and move[1] == end_col and abs(move[2] - move[0]) == 2]
+                if additional_moves:
+                    reward += 0.5  # Small bonus for having additional captures
+                    return self.board, reward, additional_moves
+
+            # Position-based rewards
             if player == 1:
-                reward += end_row * 0.05
+                reward += end_row * 0.1  # Reward for advancing forward
             else:
-                reward += (self.board_size - 1 - end_row) * 0.05
-            
-            # Center control
-            if self.board_size//3 <= end_row <= 2*self.board_size//3 and \
-               self.board_size//3 <= end_col <= 2*self.board_size//3:
-                reward += 0.1
-            
+                reward += (5 - end_row) * 0.1  # Reward for advancing forward
+
             # Win/Loss rewards
             winner = self.game_winner(self.board)
             if winner == player:
-                reward += 5.0
+                reward += 5.0  # Big reward for winning
             elif winner == -player:
-                reward -= 5.0
-            
-            # Check for additional captures
-            additional_moves = []
-            if abs(start_row - end_row) == 2:
-                additional_moves = self._get_piece_captures(end_row, end_col, player)
-            
-            return self.board, reward, additional_moves
-        
-        except Exception as e:
-            print(f"Error in step method: {str(e)}")
-            print(f"Action: {action}")
-            print(f"Player: {player}")
-            print("Current board state:")
-            self.render()
-            return self.board, -1, []
+                reward -= 5.0  # Big penalty for losing
+
+        except ValueError as e:
+            raise ValueError("Invalid move")
+
+        return self.board, reward, []
 
     def game_winner(self, board):
         """Check if game is won"""

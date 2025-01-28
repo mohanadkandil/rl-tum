@@ -34,7 +34,7 @@ def evaluate_agent(agent, env):
     agent.epsilon = 0  # Turn off exploration
     
     for episode in range(EVAL_EPISODES):
-        env.reset()  # Reset environment
+        state = env.reset()
         done = False
         moves_made = 0
         
@@ -43,19 +43,15 @@ def evaluate_agent(agent, env):
             valid_moves = env.valid_moves(env.player)
             
             if not valid_moves:
-                wins += 1  # AI lost (no moves)
                 break
                 
-            # Get current board state
-            current_state = env.board.copy()  # Make sure we're using the board state
-            action = agent.act(current_state, valid_moves)
-            next_state, reward, additional_moves = env.step(action, env.player)
+            action = agent.act(state, valid_moves)
+            next_state, reward, additional_moves, done = env.step(action, env.player)
             moves_made += 1
             
-            if env.game_winner(env.board) == 1:
-                wins += 1
-                break
-            elif env.game_winner(env.board) == -1:
+            if done:
+                if env.game_winner(next_state) == -1:  # AI won
+                    wins += 1
                 break
                 
             # Random opponent move
@@ -63,135 +59,112 @@ def evaluate_agent(agent, env):
             valid_moves = env.valid_moves(env.player)
             
             if not valid_moves:
+                wins += 1  # AI won if opponent has no moves
                 break
                 
             action = random.choice(valid_moves)
-            next_state, reward, additional_moves = env.step(action, env.player)
+            next_state, reward, _, done = env.step(action, env.player)
             moves_made += 1
             
-            if env.game_winner(env.board) != 0:
-                if env.game_winner(env.board) == -1:
+            if done:
+                if env.game_winner(next_state) == -1:  # AI won
                     wins += 1
                 break
+                
+            state = next_state
     
     agent.epsilon = original_epsilon
     return wins / EVAL_EPISODES
 
-def train_agent(episodes=200, eval_frequency=100):
+def train_agent(episodes=2000):
     env = checkers_env()
-    agent = DQNAgent(
-        state_size=36,
-        action_size=1296,
-        hidden_size=256
-    )
-    
-    episode_rewards = []
+    agent = DQNAgent()
+    rewards = []
     win_rates = []
+    eval_frequency = 50
+    total_steps = 0
     
-    print(f"Using device: {agent.device}")
-    print(f"Training for {episodes} episodes")
-    
-    # Create checkpoints directory
-    os.makedirs('checkpoints', exist_ok=True)
-    
-    try:
-        for episode in range(episodes):
-            state = env.reset()
-            total_reward = 0
-            done = False
-            moves_made = 0
-            
-            if episode % 10 == 0:
-                print(f"\rEpisode {episode}/{episodes}", end="", flush=True)
-            
-            while not done and moves_made < 200:
-                current_state = env.board.copy()
-                valid_moves = env.valid_moves(env.player)
+    print("Starting training...")
+    for episode in range(episodes):
+        state = env.reset()
+        episode_reward = 0
+        moves_made = 0
+        
+        while moves_made < 200:  # Prevent infinite games
+            # AI turn
+            env.player = -1
+            valid_moves = env.valid_moves(env.player)
+            if not valid_moves:
+                break
                 
-                if not valid_moves:
-                    break
-                    
-                action = agent.act(current_state, valid_moves)
-                next_state, reward, additional_moves = env.step(action, env.player)
-                done = env.game_winner(env.board) != 0
-                agent.remember(current_state, action, reward, next_state, done)
-                
-                if len(agent.memory) >= agent.batch_size:
-                    agent.replay()
-                
-                total_reward += reward
-                moves_made += 1
-                
-                while additional_moves and not done:
-                    action = additional_moves[0]
-                    next_state, reward, additional_moves = env.step(action, env.player)
-                    total_reward += reward
-                    moves_made += 1
-                    done = env.game_winner(env.board) != 0
+            action = agent.act(state, valid_moves)
+            next_state, reward, additional_moves, done = env.step(action, env.player)
+            moves_made += 1
+            total_steps += 1
             
-            episode_rewards.append(total_reward)
+            # Store transition
+            agent.remember(state, action, reward, next_state, done)
             
-            if episode % TARGET_UPDATE == 0:
+            # Train more frequently
+            if len(agent.memory) > agent.batch_size:
+                agent.replay()
+                
+            if done:
+                break
+                
+            # Opponent turn
+            env.player = 1
+            valid_moves = env.valid_moves(env.player)
+            if not valid_moves:
+                break
+                
+            action = random.choice(valid_moves)
+            next_state, reward, _, done = env.step(action, env.player)
+            moves_made += 1
+            
+            if done:
+                break
+                
+            state = next_state
+            episode_reward += reward
+            
+            # Update target network periodically
+            if total_steps % 1000 == 0:  # More frequent updates
                 agent.update_target_network()
-                print(f"\nUpdating target network at episode {episode}")
-            
-            if (episode + 1) % eval_frequency == 0:
-                win_rate = evaluate_agent(agent, env)
-                win_rates.append(win_rate)
-                print(f"\nEpisode {episode + 1}/{episodes}")
-                print(f"Average Reward: {np.mean(episode_rewards[-100:]):.2f}")
-                print(f"Win Rate: {win_rate:.2%}")
-                print(f"Epsilon: {agent.epsilon:.3f}")
-                print(f"Memory size: {len(agent.memory)}")
-                print("------------------------")
-                
-                # Save checkpoint
-                torch.save({
-                    'episode': episode,
-                    'model_state_dict': agent.q_network.state_dict(),
-                    'optimizer_state_dict': agent.optimizer.state_dict(),
-                    'win_rate': win_rate,
-                }, f'checkpoints/model_ep{episode+1}.pt')
-    
-    except KeyboardInterrupt:
-        print("\nTraining interrupted by user")
-    
-    # Save final model
-    torch.save({
-        'model_state_dict': agent.q_network.state_dict(),
-        'optimizer_state_dict': agent.optimizer.state_dict(),
-    }, 'checkpoints/final_model.pt')
-    
-    return agent, episode_rewards, win_rates
+        
+        rewards.append(episode_reward)
+        
+        # Evaluate periodically
+        if episode % eval_frequency == 0:
+            win_rate = evaluate_agent(agent, env)
+            win_rates.append(win_rate)
+            print(f"Episode {episode}, Win Rate: {win_rate:.2%}, Epsilon: {agent.epsilon:.3f}")
+
+    return agent, rewards, win_rates, episodes, eval_frequency
 
 def plot_training_results(rewards, win_rates, episodes, eval_frequency):
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 10))
+    """Plot training results"""
+    plt.figure(figsize=(12, 5))
     
-    ax1.plot(rewards)
-    ax1.set_title('Training Rewards')
-    ax1.set_xlabel('Episode')
-    ax1.set_ylabel('Total Reward')
+    # Plot rewards
+    plt.subplot(1, 2, 1)
+    plt.plot(rewards)
+    plt.title('Training Rewards')
+    plt.xlabel('Episode')
+    plt.ylabel('Total Reward')
     
-    # Use actual episodes and eval_frequency
-    eval_episodes = np.arange(eval_frequency, episodes + 1, eval_frequency)
-    ax2.plot(eval_episodes, win_rates)
-    ax2.set_title('Agent Win Rate')
-    ax2.set_xlabel('Episode')
-    ax2.set_ylabel('Win Rate')
+    # Plot win rates
+    plt.subplot(1, 2, 2)
+    eval_episodes = range(0, episodes + 1, eval_frequency)
+    plt.plot(eval_episodes, win_rates)
+    plt.title('Agent Win Rate')
+    plt.xlabel('Episode')
+    plt.ylabel('Win Rate')
     
     plt.tight_layout()
     plt.savefig('training_results.png')
     plt.close()
 
 if __name__ == "__main__":
-    args = parse_args()
-    trained_agent, rewards, win_rates = train_agent(
-        episodes=args.episodes,
-        eval_frequency=args.eval_frequency
-    )
-    plot_training_results(
-        rewards, 
-        win_rates, 
-        episodes=args.episodes,
-        eval_frequency=args.eval_frequency
-    ) 
+    trained_agent, rewards, win_rates, episodes, eval_frequency = train_agent()
+    plot_training_results(rewards, win_rates, episodes, eval_frequency) 

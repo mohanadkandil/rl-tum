@@ -76,15 +76,22 @@ def evaluate_agent(agent, env):
     agent.epsilon = original_epsilon
     return wins / EVAL_EPISODES
 
-def train_agent(episodes=2000):
+def train_agent(episodes=None):
+    # Use arguments if episodes not specified
+    if episodes is None:
+        args = parse_args()
+        episodes = args.episodes
+        eval_frequency = args.eval_frequency
+    else:
+        eval_frequency = 50  # Default if episodes directly specified
+    
     env = checkers_env()
     agent = DQNAgent()
     rewards = []
     win_rates = []
-    eval_frequency = 50
     total_steps = 0
     
-    print("Starting training...")
+    print(f"Starting training for {episodes} episodes...")
     for episode in range(episodes):
         state = env.reset()
         episode_reward = 0
@@ -138,24 +145,26 @@ def train_agent(episodes=2000):
         if episode % eval_frequency == 0:
             win_rate = evaluate_agent(agent, env)
             win_rates.append(win_rate)
-            print(f"Episode {episode}, Win Rate: {win_rate:.2%}, Epsilon: {agent.epsilon:.3f}")
+            print(f"Episode {episode}/{episodes}, Win Rate: {win_rate:.2%}, Epsilon: {agent.epsilon:.3f}")
 
-    return agent, rewards, win_rates, episodes, eval_frequency
+    return agent, rewards, win_rates, eval_frequency
 
-def plot_training_results(rewards, win_rates, episodes, eval_frequency):
-    """Plot training results"""
+def plot_training_results(rewards, win_rates, eval_frequency=50):
     plt.figure(figsize=(12, 5))
     
     # Plot rewards
     plt.subplot(1, 2, 1)
-    plt.plot(rewards)
+    plt.plot(range(len(rewards)), rewards)
     plt.title('Training Rewards')
     plt.xlabel('Episode')
     plt.ylabel('Total Reward')
     
     # Plot win rates
     plt.subplot(1, 2, 2)
-    eval_episodes = range(0, episodes + 1, eval_frequency)
+    # Calculate correct x-axis points for win rates
+    eval_episodes = range(0, len(rewards), eval_frequency)
+    if len(eval_episodes) > len(win_rates):
+        eval_episodes = eval_episodes[:len(win_rates)]
     plt.plot(eval_episodes, win_rates)
     plt.title('Agent Win Rate')
     plt.xlabel('Episode')
@@ -166,5 +175,5 @@ def plot_training_results(rewards, win_rates, episodes, eval_frequency):
     plt.close()
 
 if __name__ == "__main__":
-    trained_agent, rewards, win_rates, episodes, eval_frequency = train_agent()
-    plot_training_results(rewards, win_rates, episodes, eval_frequency) 
+    trained_agent, rewards, win_rates, eval_frequency = train_agent()
+    plot_training_results(rewards, win_rates, eval_frequency) 

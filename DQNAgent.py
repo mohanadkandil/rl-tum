@@ -7,6 +7,8 @@ import random
 import torch.multiprocessing as mp
 import torch.nn.functional as F
 
+mp.set_start_method('spawn', force=True)  # Add this at the top of the file
+
 class ParallelDQN(nn.Module):
     def __init__(self, state_size, action_size, hidden_size):
         super(ParallelDQN, self).__init__()
@@ -92,9 +94,31 @@ class DQNAgent:
         self.learning_rate = 0.0001
         self.batch_size = 64
         
-        # CUDA setup
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        print(f"Using device: {self.device}")
+        # Proper H100 CUDA setup
+        if torch.cuda.is_available():
+            # Force CUDA device selection
+            torch.cuda.set_device(0)  # Use first GPU
+            self.device = torch.device("cuda:0")
+            
+            # Enable TF32 for better performance on Ampere/Hopper GPUs
+            torch.backends.cuda.matmul.allow_tf32 = True
+            torch.backends.cudnn.allow_tf32 = True
+            
+            # Set up CUDA optimization
+            torch.backends.cudnn.benchmark = True
+            torch.backends.cudnn.enabled = True
+            
+            # Clear GPU memory
+            torch.cuda.empty_cache()
+            
+            print(f"Using GPU: {torch.cuda.get_device_name(0)}")
+            print(f"CUDA Version: {torch.version.cuda}")
+            print(f"Memory Usage:")
+            print(f"Allocated: {torch.cuda.memory_allocated(0)//1024//1024}MB")
+            print(f"Cached: {torch.cuda.memory_reserved(0)//1024//1024}MB")
+        else:
+            self.device = torch.device("cpu")
+            print("WARNING: No GPU found, using CPU")
         
         def create_network():
             model = nn.Sequential(
@@ -106,19 +130,28 @@ class DQNAgent:
                 nn.Dropout(0.2),
                 nn.Linear(512, action_size)
             )
-            return model.to(self.device)  # Move model to GPU if available
+            
+            # Move model to GPU before DataParallel
+            model = model.to(self.device)
+            
+            if torch.cuda.device_count() > 1:
+                print(f"Using {torch.cuda.device_count()} GPUs!")
+                return nn.DataParallel(model, device_ids=list(range(torch.cuda.device_count())))
+            return model
         
+        # Create networks and ensure they're on GPU
         self.q_network = create_network()
         self.target_network = create_network()
         
-        # Enable multi-GPU if available
-        if torch.cuda.device_count() > 1:
-            print(f"Using {torch.cuda.device_count()} GPUs!")
-            self.q_network = nn.DataParallel(self.q_network)
-            self.target_network = nn.DataParallel(self.target_network)
+        # Use mixed precision training only if CUDA is available
+        self.scaler = torch.cuda.amp.GradScaler() if torch.cuda.is_available() else None
         
-        self.target_network.load_state_dict(self.q_network.state_dict())
+        # Move optimizer to GPU
         self.optimizer = optim.Adam(self.q_network.parameters(), lr=self.learning_rate)
+        for state in self.optimizer.state.values():
+            for k, v in state.items():
+                if torch.is_tensor(v):
+                    state[k] = v.to(self.device)
         
         # Add priority replay parameters
         self.priority_alpha = 0.6  # How much prioritization to use (0 = uniform, 1 = full prioritization)
@@ -151,40 +184,82 @@ class DQNAgent:
             return
             
         batch, indices, weights = self.memory.sample(self.batch_size, self.priority_beta)
-        weights = torch.FloatTensor(weights).to(self.device)
+        weights = torch.FloatTensor(weights).to(self.device, non_blocking=True)
         
-        # Move batch data to GPU
-        states = torch.FloatTensor(np.vstack([s.flatten() for s, _, _, _, _ in batch])).to(self.device)
-        next_states = torch.FloatTensor(np.vstack([ns.flatten() for _, _, _, ns, _ in batch])).to(self.device)
+        # Prepare batch data efficiently
+        states = torch.from_numpy(np.vstack([s.flatten() for s, _, _, _, _ in batch])).float()
+        next_states = torch.from_numpy(np.vstack([ns.flatten() for _, _, _, ns, _ in batch])).float()
+        
+        # Handle data transfer based on device
+        if torch.cuda.is_available():
+            # Use CUDA streams for parallel data transfer
+            with torch.cuda.stream(torch.cuda.Stream()):
+                states = states.pin_memory().to(self.device, non_blocking=True)
+                next_states = next_states.pin_memory().to(self.device, non_blocking=True)
+        else:
+            # CPU path - simple transfer
+            states = states.to(self.device)
+            next_states = next_states.to(self.device)
         
         self.q_network.train()
         self.target_network.eval()
         
-        current_q_values = self.q_network(states)
-        with torch.no_grad():
-            next_q_values = self.target_network(next_states)
-        
-        target = current_q_values.clone()
-        td_errors = []
-        
-        for i, (_, action, reward, _, done) in enumerate(batch):
-            if done:
-                target_value = reward
-            else:
-                target_value = reward + self.gamma * torch.max(next_q_values[i])
+        # Use mixed precision training only if CUDA is available
+        if torch.cuda.is_available():
+            with torch.cuda.amp.autocast():
+                current_q_values = self.q_network(states)
+                with torch.no_grad():
+                    next_q_values = self.target_network(next_states)
+                
+                target = current_q_values.clone()
+                td_errors = []
+                
+                for i, (_, action, reward, _, done) in enumerate(batch):
+                    if done:
+                        target_value = reward
+                    else:
+                        target_value = reward + self.gamma * torch.max(next_q_values[i])
+                    
+                    current_value = current_q_values[i][self.encode_action(action)]
+                    td_error = abs(target_value - current_value.item())
+                    td_errors.append(td_error)
+                    
+                    target[i][self.encode_action(action)] = target_value
+                
+                losses = F.mse_loss(current_q_values, target, reduction='none')
+                weighted_loss = (weights.unsqueeze(1) * losses.mean(dim=1)).mean()
             
-            current_value = current_q_values[i][self.encode_action(action)]
-            td_error = abs(target_value - current_value.item())
-            td_errors.append(td_error)
+            self.optimizer.zero_grad()
+            self.scaler.scale(weighted_loss).backward()
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
+        else:
+            # CPU training path
+            current_q_values = self.q_network(states)
+            with torch.no_grad():
+                next_q_values = self.target_network(next_states)
             
-            target[i][self.encode_action(action)] = target_value
-        
-        losses = F.mse_loss(current_q_values, target, reduction='none')
-        weighted_loss = (weights.unsqueeze(1) * losses.mean(dim=1)).mean()
-        
-        self.optimizer.zero_grad()
-        weighted_loss.backward()
-        self.optimizer.step()
+            target = current_q_values.clone()
+            td_errors = []
+            
+            for i, (_, action, reward, _, done) in enumerate(batch):
+                if done:
+                    target_value = reward
+                else:
+                    target_value = reward + self.gamma * torch.max(next_q_values[i])
+                
+                current_value = current_q_values[i][self.encode_action(action)]
+                td_error = abs(target_value - current_value.item())
+                td_errors.append(td_error)
+                
+                target[i][self.encode_action(action)] = target_value
+            
+            losses = F.mse_loss(current_q_values, target, reduction='none')
+            weighted_loss = (weights.unsqueeze(1) * losses.mean(dim=1)).mean()
+            
+            self.optimizer.zero_grad()
+            weighted_loss.backward()
+            self.optimizer.step()
         
         self.memory.update_priorities(indices, td_errors)
         

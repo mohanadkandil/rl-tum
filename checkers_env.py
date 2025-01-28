@@ -113,72 +113,89 @@ class checkers_env:
     def step(self, action, player):
         """Execute move and return new state, reward, and additional moves"""
         try:
-            # Validate action format
-            if action is None or len(action) != 4:
-                print(f"Invalid action format: {action}")
-                return self.board, -1, []
-            
+            additional_moves = []
             start_row, start_col, end_row, end_col = action
-            
-            # Get valid moves for current player
-            valid_moves = self.valid_moves(player)
-            
-            # Debug information
-            if action not in valid_moves:
-                print(f"Invalid move: {action}")
-                print(f"Valid moves: {valid_moves}")
-                print(f"Current player: {player}")
-                print(f"Current board state:")
-                self.render()
-                return self.board, -1, []
-            
             piece = self.board[start_row][start_col]
             reward = 0
             
-            # Move piece
+            # Store initial state for comparison
+            initial_state = {
+                'player_pieces': np.sum(self.board * player > 0),
+                'player_kings': np.sum(np.abs(self.board * player) == 2),
+                'opponent_pieces': np.sum(self.board * -player > 0),
+                'opponent_kings': np.sum(np.abs(self.board * -player) == 2),
+                'center_control': np.sum(self.board[2:4, 2:4] * player > 0)
+            }
+
+            # Make the move
             self.board[start_row][start_col] = 0
             self.board[end_row][end_col] = piece
 
-            # Check for King promotion
-            if player == 1 and end_row == 5:
-                self.board[end_row][end_col] = 2
-                reward += 2.0  # Bonus for king promotion
-            elif player == -1 and end_row == 0:
-                self.board[end_row][end_col] = -2
-                reward += 2.0  # Bonus for king promotion
+            # King promotion
+            if (player == 1 and end_row == 5) or (player == -1 and end_row == 0):
+                self.board[end_row][end_col] = 2 * player
+                reward += 5.0  # Significant reward for getting a king
 
             # Handle capture
             if abs(start_row - end_row) == 2:
-                mid_row = (start_row + end_row) // 2
-                mid_col = (start_col + end_col) // 2
+                mid_row, mid_col = (start_row + end_row) // 2, (start_col + end_col) // 2
+                captured_piece = self.board[mid_row][mid_col]
                 self.board[mid_row][mid_col] = 0
-                reward += 1.0  # Bonus for capturing piece
                 
-                # Check for additional capture moves
-                additional_moves = self.valid_moves(player)
-                additional_moves = [move for move in additional_moves if
-                                  move[0] == end_row and move[1] == end_col and abs(move[2] - move[0]) == 2]
+                # Higher reward for capturing kings
+                reward += 8.0 if abs(captured_piece) == 2 else 4.0
+                
+                # Check for additional captures
+                additional_moves = [move for move in self.valid_moves(player) 
+                                  if move[0] == end_row and move[1] == end_col and abs(move[2] - move[0]) == 2]
                 if additional_moves:
-                    reward += 0.5  # Small bonus for having additional captures
-                    return self.board, reward, additional_moves
+                    reward += 2.0  # Bonus for creating multiple capture opportunity
 
-            # Position-based rewards
+            # Calculate strategic rewards
+            final_state = {
+                'player_pieces': np.sum(self.board * player > 0),
+                'player_kings': np.sum(np.abs(self.board * player) == 2),
+                'opponent_pieces': np.sum(self.board * -player > 0),
+                'opponent_kings': np.sum(np.abs(self.board * -player) == 2),
+                'center_control': np.sum(self.board[2:4, 2:4] * player > 0)
+            }
+
+            # Piece protection (back row occupation)
             if player == 1:
-                reward += end_row * 0.1  # Reward for advancing forward
+                back_row_protection = np.sum(self.board[0, :] == player)
             else:
-                reward += (5 - end_row) * 0.1  # Reward for advancing forward
+                back_row_protection = np.sum(self.board[5, :] == player)
+            reward += back_row_protection * 0.5
 
-            # Win/Loss rewards
+            # Center control
+            center_control_change = final_state['center_control'] - initial_state['center_control']
+            reward += center_control_change * 2.0
+
+            # Piece advantage
+            piece_advantage_change = (final_state['player_pieces'] - initial_state['player_pieces']) - \
+                                   (final_state['opponent_pieces'] - initial_state['opponent_pieces'])
+            reward += piece_advantage_change * 3.0
+
+            # Game outcome rewards
             winner = self.game_winner(self.board)
             if winner == player:
-                reward += 5.0  # Big reward for winning
+                reward += 50.0  # Big reward for winning
             elif winner == -player:
-                reward -= 5.0  # Big penalty for losing
+                reward -= 50.0  # Big penalty for losing
+            elif winner == 0 and len(self.valid_moves(-player)) == 0:
+                reward += 25.0  # Reward for putting opponent in a tough position
+
+            # Mobility reward (number of moves available to opponent after this move)
+            opponent_mobility = len(self.valid_moves(-player))
+            if opponent_mobility == 0 and winner == 0:
+                reward += 10.0  # Reward for restricting opponent's moves
+            elif opponent_mobility < 2:
+                reward += 2.0  # Smaller reward for limiting opponent's options
+
+            return self.board, reward, additional_moves
 
         except ValueError as e:
             raise ValueError("Invalid move")
-
-        return self.board, reward, []
 
     def game_winner(self, board):
         """Check if game is won"""

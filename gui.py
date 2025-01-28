@@ -30,6 +30,13 @@ class CheckersGUI:
         self.game_over = False
         self.winner = 0
         self.font = pygame.font.Font(None, 74)
+        
+        # Add sounds
+        self.sounds = {
+            'piece_move': pygame.mixer.Sound('sounds/attack.wav'),
+            'victory': pygame.mixer.Sound('sounds/victory.wav'),
+        }
+        self.victory_played = False
 
     def draw_board(self):
         self.screen.fill(BLACK)
@@ -87,6 +94,10 @@ class CheckersGUI:
 
     def draw_game_over(self):
         if self.game_over:
+            if not self.victory_played:
+                self.sounds['victory'].play()
+                self.victory_played = True
+            
             overlay = pygame.Surface((WIDTH, HEIGHT))
             overlay.fill(BLACK)
             overlay.set_alpha(128)
@@ -120,6 +131,8 @@ class CheckersGUI:
         if self.selected_piece:
             move = self.try_move(row, col)
             if move:
+                # Play sound when making a valid move
+                self.sounds['piece_move'].play()
                 self.make_move(move)
             elif piece * self.player_turn > 0:
                 self.select_piece(row, col)

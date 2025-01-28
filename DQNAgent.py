@@ -82,34 +82,40 @@ class PriorityReplayBuffer:
 
 class DQNAgent:
     def __init__(self, state_size=36, action_size=1296):
+        # Set random seeds for reproducibility
+        torch.manual_seed(42)
+        np.random.seed(42)
+        random.seed(42)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(42)
+        
         self.state_size = state_size
         self.action_size = action_size
         self.memory = PriorityReplayBuffer(100000, 0.6)
         
-        # Training parameters
-        self.gamma = 0.99
-        self.epsilon = 1.0
-        self.epsilon_min = 0.01
-        self.epsilon_decay = 0.995
+        # Enhanced training parameters
+        self.gamma = 0.99  # Discount factor
+        self.epsilon = 1.0  # Starting exploration rate
+        self.epsilon_min = 0.01  # Minimum exploration rate
+        self.epsilon_decay = 0.9995  # More gradual decay (was 0.995)
         self.learning_rate = 0.0001
-        self.batch_size = 64
+        self.batch_size = 128  # Increased batch size for H100
         
-        # Proper H100 CUDA setup
+        # H100 specific optimizations
         if torch.cuda.is_available():
-            # Force CUDA device selection
-            torch.cuda.set_device(0)  # Use first GPU
+            torch.cuda.set_device(0)
             self.device = torch.device("cuda:0")
             
-            # Enable TF32 for better performance on Ampere/Hopper GPUs
+            # Enable TF32 and other optimizations
             torch.backends.cuda.matmul.allow_tf32 = True
             torch.backends.cudnn.allow_tf32 = True
-            
-            # Set up CUDA optimization
             torch.backends.cudnn.benchmark = True
             torch.backends.cudnn.enabled = True
+            torch.backends.cudnn.deterministic = True  # For reproducibility
             
-            # Clear GPU memory
+            # Set higher memory fraction for GPU
             torch.cuda.empty_cache()
+            torch.cuda.set_per_process_memory_fraction(0.95)  # Use 95% of GPU memory
             
             print(f"Using GPU: {torch.cuda.get_device_name(0)}")
             print(f"CUDA Version: {torch.version.cuda}")
@@ -122,18 +128,18 @@ class DQNAgent:
         
         def create_network():
             model = nn.Sequential(
-                nn.Linear(state_size, 512),
+                nn.Linear(state_size, 1024),  # Wider network
                 nn.ReLU(),
                 nn.Dropout(0.2),
-                nn.Linear(512, 512),
+                nn.Linear(1024, 1024),
                 nn.ReLU(),
                 nn.Dropout(0.2),
+                nn.Linear(1024, 512),
+                nn.ReLU(),
                 nn.Linear(512, action_size)
             )
             
-            # Move model to GPU before DataParallel
             model = model.to(self.device)
-            
             if torch.cuda.device_count() > 1:
                 print(f"Using {torch.cuda.device_count()} GPUs!")
                 return nn.DataParallel(model, device_ids=list(range(torch.cuda.device_count())))
@@ -262,9 +268,6 @@ class DQNAgent:
             self.optimizer.step()
         
         self.memory.update_priorities(indices, td_errors)
-        
-        if self.epsilon > self.epsilon_min:
-            self.epsilon *= self.epsilon_decay
         
     def update_target_network(self):
         self.target_network.load_state_dict(self.q_network.state_dict())

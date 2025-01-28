@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import os
 import random
 import argparse
+import math
 
 # Training parameters
 EPISODES = 1000
@@ -123,7 +124,10 @@ def train_agent(episodes=None):
             # Train more frequently
             if len(agent.memory) > agent.batch_size:
                 agent.replay()
-                
+                # Decay epsilon after each replay (more gradual)
+                if agent.epsilon > agent.epsilon_min:
+                    agent.epsilon = max(agent.epsilon_min, agent.epsilon * agent.epsilon_decay)
+            
             if done:
                 break
                 
@@ -153,7 +157,8 @@ def train_agent(episodes=None):
         if episode % eval_frequency == 0:
             win_rate = evaluate_agent(agent, env)
             win_rates.append(win_rate)
-            print(f"Episode {episode}/{episodes}, Win Rate: {win_rate:.2%}, Epsilon: {agent.epsilon:.3f}")
+            print(f"Episode {episode}/{episodes}, Win Rate: {win_rate:.2%}, "
+                  f"Epsilon: {agent.epsilon:.3f}, Reward: {episode_reward:.1f}")
             
             # Save best model in checkpoints directory
             if win_rate > best_win_rate:

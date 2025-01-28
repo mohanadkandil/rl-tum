@@ -5,6 +5,7 @@ from DQNAgent import DQNAgent
 import matplotlib.pyplot as plt
 import os
 import random
+import argparse
 
 # Training parameters
 EPISODES = 200
@@ -17,6 +18,14 @@ LEARNING_RATE = 0.0005
 EPSILON_START = 1.0
 EPSILON_END = 0.05
 EPSILON_DECAY = 0.998
+
+def parse_args():
+    parser = argparse.ArgumentParser(description='Train Checkers AI')
+    parser.add_argument('--episodes', type=int, default=200,
+                       help='Number of episodes to train (default: 200)')
+    parser.add_argument('--eval-frequency', type=int, default=100,
+                       help='How often to evaluate the agent (default: 100)')
+    return parser.parse_args()
 
 def evaluate_agent(agent, env):
     """Evaluate agent performance without exploration"""
@@ -68,7 +77,7 @@ def evaluate_agent(agent, env):
     agent.epsilon = original_epsilon
     return wins / EVAL_EPISODES
 
-def train_agent():
+def train_agent(episodes=200, eval_frequency=100):
     env = checkers_env()
     agent = DQNAgent(
         state_size=36,
@@ -80,19 +89,20 @@ def train_agent():
     win_rates = []
     
     print(f"Using device: {agent.device}")
+    print(f"Training for {episodes} episodes")
     
     # Create checkpoints directory
     os.makedirs('checkpoints', exist_ok=True)
     
     try:
-        for episode in range(EPISODES):
+        for episode in range(episodes):
             state = env.reset()
             total_reward = 0
             done = False
             moves_made = 0
             
             if episode % 10 == 0:
-                print(f"\rEpisode {episode}/{EPISODES}", end="", flush=True)
+                print(f"\rEpisode {episode}/{episodes}", end="", flush=True)
             
             while not done and moves_made < 200:
                 current_state = env.board.copy()
@@ -125,10 +135,10 @@ def train_agent():
                 agent.update_target_network()
                 print(f"\nUpdating target network at episode {episode}")
             
-            if (episode + 1) % EVAL_FREQUENCY == 0:
+            if (episode + 1) % eval_frequency == 0:
                 win_rate = evaluate_agent(agent, env)
                 win_rates.append(win_rate)
-                print(f"\nEpisode {episode + 1}/{EPISODES}")
+                print(f"\nEpisode {episode + 1}/{episodes}")
                 print(f"Average Reward: {np.mean(episode_rewards[-100:]):.2f}")
                 print(f"Win Rate: {win_rate:.2%}")
                 print(f"Epsilon: {agent.epsilon:.3f}")
@@ -154,7 +164,7 @@ def train_agent():
     
     return agent, episode_rewards, win_rates
 
-def plot_training_results(rewards, win_rates):
+def plot_training_results(rewards, win_rates, episodes, eval_frequency):
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 10))
     
     ax1.plot(rewards)
@@ -162,7 +172,8 @@ def plot_training_results(rewards, win_rates):
     ax1.set_xlabel('Episode')
     ax1.set_ylabel('Total Reward')
     
-    eval_episodes = np.arange(EVAL_FREQUENCY, EPISODES + 1, EVAL_FREQUENCY)
+    # Use actual episodes and eval_frequency
+    eval_episodes = np.arange(eval_frequency, episodes + 1, eval_frequency)
     ax2.plot(eval_episodes, win_rates)
     ax2.set_title('Agent Win Rate')
     ax2.set_xlabel('Episode')
@@ -173,5 +184,14 @@ def plot_training_results(rewards, win_rates):
     plt.close()
 
 if __name__ == "__main__":
-    trained_agent, rewards, win_rates = train_agent()
-    plot_training_results(rewards, win_rates) 
+    args = parse_args()
+    trained_agent, rewards, win_rates = train_agent(
+        episodes=args.episodes,
+        eval_frequency=args.eval_frequency
+    )
+    plot_training_results(
+        rewards, 
+        win_rates, 
+        episodes=args.episodes,
+        eval_frequency=args.eval_frequency
+    ) 

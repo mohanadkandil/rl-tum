@@ -38,7 +38,7 @@
 \subtitle{Mastering Strategy Through Reinforcement Learning}
 \author{Alexandros Stathakopoulos, Mohanad Kandil}
 \institute[]{\UniversitaetName}
-\date[\Datum]{Heilbronn, 09. Dezember 2024}
+\date[\Datum]{Heilbronn, 29. Januar 2025}
 \subject{}
 
 
@@ -53,209 +53,113 @@
 
 \PraesentationTitelseite % Fügt die Startseite ein
 
+% Slide 1: Agenda
 \begin{frame}
-	\frametitle{Agenda}
-	\vspace{0.5cm}
-	\begin{enumerate}
-		\item Historical Background
-		\item Introduction to RL
-		\item Introduction to Deep Q-Learning
-		\item Discussion of Algorithms
-		\item Project Planning
-	\end{enumerate}
+    \frametitle{Agenda}
+    \begin{enumerate}
+        \item Introduction
+        \item Model Overview
+        \item Algorithm Explanation
+        \item Code Structure \& Implementation
+        \item Algorithm Performance \& Results
+        \item Implications \& Limitations
+        \item Conclusion \& Q\&A
+    \end{enumerate}
 \end{frame}
 
-
+% Slide 2: Introduction - Background & Motivation
 \begin{frame}
-	\frametitle{Historical Background}
-	\vspace{0.5cm}
-	Historical Progression
-	\vspace{-0.2cm}
-	\begin{itemize}
-		\item Rooted in trial-and-error learning (Thorndike's Law of Effect)
-		\item Incorporates dynamic programming and Markov Decision Processes
-	\end{itemize}
-	Advance in Games
-	\vspace{-0.2cm}
-	\begin{itemize}
-		\item \textbf{Samuel's Checkers Player (1959)}: Demonstrated RL in game strategies 
-				\begin{itemize}
-					\item Used a value function for state evaluation
-					\item Pioneered the use of \textbf{minimax strategy} combined with RL concepts
-				\end{itemize}
-		\item\textbf{ TD-Gammon (1992)}: Combined RL with neural networks for complex games (e.g., backgammon)
-	\end{itemize}
+    \frametitle{Introduction - Background \& Motivation}
+    \begin{itemize}
+        \item Problem Statement: What are we solving?
+        \item Why is reinforcement learning important?
+        \item Brief mention of prior research
+        \item Project Goal: Train an AI agent using RL
+    \end{itemize}
 \end{frame}
 
+% Slide 3: Model Overview
 \begin{frame}
-	\frametitle{Introduction}
-	\vspace{1cm}
-	\centering
-	\includegraphics[scale=0.1]{appleNYC}
+    \frametitle{Model Overview}
+    \begin{itemize}
+        \item What is our RL model trying to achieve?
+        \item Type of RL Model: Q-Learning \& Deep Q-Network (DQN)
+        \item High-Level Concept: Interaction between Agent and Environment
+    \end{itemize}
+    \centering
+    \includegraphics[scale=0.25]{rl_agent_env}
 \end{frame}
 
+% Slide 4: Algorithm Explanation
 \begin{frame}
-	\frametitle{Introduction}
-	\vspace{0.5cm}
-	\begin{itemize}
-		\item Checkers is a strategy game involving diagonal moves of pieces and captures by jumping over opponent pieces
-		\item The objective of the project is to create an AI player using reinforcement learning
-		\item Techniques: Q-learning and Deep Q-Networks (DQN)
-	\end{itemize}
-	\centering
-	\includegraphics[scale=0.25]{checkers}
+    \frametitle{Algorithm Explanation - Deep Q-Learning}
+    \begin{itemize}
+        \item Reinforcement learning technique to find optimal action-value function \( Q(s,a) \)
+        \item Uses a neural network instead of a Q-table
+        \item Action Selection: $\epsilon$-greedy policy for exploration vs exploitation
+        \item Experience Replay to improve stability
+    \end{itemize}
+    \centering
+    % \includegraphics[scale=0.2]{dqn_checkers}
 \end{frame}
 
-
+% Slide 5: Code Structure & Implementation
 \begin{frame}
-	\frametitle{What is Reinforcement Learning?}
-	\vspace{0.2cm}
-	\begin{itemize}
-		\item A machine learning paradigm focused on training agents to make sequences of decisions
-		\item Key components:
-		\begin{itemize}
-			\item \textbf{Agent}: Learns to act in an environment
-			\item \textbf{Environment}: The system with which the agent interacts
-			\item  \textbf{Reward}: Feedback signal indicating the success of an action
-		\end{itemize}
-		\item Goal: Maximize cumulative rewards over time
-	\end{itemize}
-	\centering
-	\includegraphics[scale=0.25]{rl_agent_env}
+    \frametitle{Code Structure \& Implementation}
+    \begin{itemize}
+        \item Overview of Repository Structure
+        \item Key Libraries: Python, TensorFlow/PyTorch, NumPy, OpenAI Gym
+        \item Training and Evaluation Pipeline
+    \end{itemize}
+    \centering
+    % \includegraphics[scale=0.2]{code_structure}
 \end{frame}
 
-
-% Model and algo Slides (WIP)
-
+% Slide 6: Algorithm Performance & Results
 \begin{frame}
-	\frametitle{Deep Q-Learning}
-	\vspace{0.5cm}
-		\begin{itemize}	
-			\item reinforcement learning technique to find the optimal action-value function $Q(s,a)$
-			\item It maps state-action pairs to their expected future rewards
-		\end{itemize}
-		 \centering
-		\includegraphics[scale=0.15]{dqn_checkers}
-		% Q-Update rule: % $$Q(s,a) = Q(s,a) +  \alpha [r + \gamma  \ max_{a'} \ Q(s',a') - Q(s,a)]$$
-			
+    \frametitle{Algorithm Performance \& Results}
+    \begin{itemize}
+        \item Performance Metrics: Reward over Episodes
+        \item Training Loss over Iterations
+        \item Baseline Model Comparison
+    \end{itemize}
+    \centering
+   %  \includegraphics[scale=0.3]{performance_graphs}
 \end{frame}
 
+% Slide 7: Implications
 \begin{frame}
-	\frametitle{Deep Q-Learning: Q-update rule}
-	\vspace{1cm}
-		
-			
-		$$Q^{\text{new}}(s_t, a_t) \leftarrow Q(s_t, a_t) 
-		+ \underbrace{\alpha}_{\text{learning rate}} \cdot 
-		\overbrace{\left( r_t + \underbrace{\gamma}_{\text{discount factor}} 
-		\cdot \underbrace{\max_a Q(s_{t+1}, a)}_{\text{estimate of optimal future value}} 
-		- \underbrace{Q(s_t, a_t)}_{\text{old value}} \right)}^{\text{temporal difference}}$$
-		
-		\vspace{1cm}
-		\pause
-		\centering
-		\textbf{Challenge}: Traditional Q-learning fails for large or continuous state spaces
+    \frametitle{Implications}
+    \begin{itemize}
+        \item Application in Finance, Robotics, Gaming, and Cloud Optimization
+        \item Enhancements for real-world decision-making
+        \item Future research directions: Combining RL with Transformer models
+    \end{itemize}
 \end{frame}
 
+% Slide 8: Limitations
 \begin{frame}
-	\frametitle{Deep Q-Learning: Solution }
-	\vspace{0.5cm}
-	Use a \textbf{Deep Neural Network} (DNN) as a function approximator for $Q(s,a)$ instead of a table
-		\begin{itemize}		
-			\item  \textbf{Input}: State $s$, \textbf{Output}: Q-values for all actions $a$
-			\item \textbf{Target Network}: stabilizes training by holding fixed weights for a few updates
-			\item \textbf{Experience Replay}: samples random batches of past experiences $(s,a,r,s')$ to break correlation in training data
-		\end{itemize}
+    \frametitle{Limitations}
+    \begin{itemize}
+        \item High computational cost
+        \item Sample inefficiency
+        \item Lack of interpretability
+        \item Generalization issues across different environments
+    \end{itemize}
 \end{frame}
 
+% Slide 9: Conclusion & Summary
 \begin{frame}
-	\frametitle{Deep Q-Learning Algorithm}
-	\vspace{1cm}
-	\centering
-	\includegraphics[scale=0.2]{lossfunction}
+    \frametitle{Conclusion \& Summary}
+    \begin{itemize}
+        \item Key Takeaways: Insights from Model Performance
+        \item Challenges \& Future Work
+    \end{itemize}
+    \pause
+    \centering
+    \textbf{Any Questions?}
 \end{frame}
 
-\begin{frame}
-	\frametitle{Deep Q-Learning Algorithm}
-	\vspace{1cm}
-	\centering
-	\includegraphics[scale=0.2]{buffer}
-\end{frame}
-
-
-\begin{frame}
-	\frametitle{Deep Q-Learning Algorithm }
-	\vspace{0.2cm}
-	Use a \textbf{Deep Neural Network} (DNN) as a function approximator for $Q(s,a)$ instead of a table
-		\begin{enumerate}		
-			\pause
-			\item Initialize: \\ Q-Network $Q(s,a;\theta)$ and Target Network $Q'(s,a;\theta^{-})$
-			\pause
-			\item Action Selection: \\ Use an $\epsilon-$ greedy policy to balance exploration vs. exploitation
-			\pause
-			\item Store Experience: \\ Add $(s,a,r,s')$ to a replay buffer
-			\pause
-			\item Train the Network: \\ 
-				\begin{itemize} 
-					 \item sample a minibatch from the buffer
-					 \item Compute target Q-values: $y = r + \gamma \ max_{a'} \ Q'(s',a';\theta^{-})$
-					\item Minimize loss: $L(\theta)=(y-Q(s,a;\theta))^2$
-				\end{itemize}
-			\pause
-			\item Update Target Network: \\ Periodically copy weights: $\theta^{-} \leftarrow \theta$
-
-		\end{enumerate}
-\end{frame}
-
-\begin{frame}
-	\frametitle{Key Improvements and Applications}
-	\vspace{0.5cm}
-	Improvements:
-		\begin{itemize}		
-			\item \textbf{Double DQN}: Reduces overestimation of Q-values
-			\item\textbf{Dueling DQN}: Separates value and advantage functions
-			\item \textbf{Prioritized Experience Replay}: Samples important experiences more frequently
-		\end{itemize}
-	\pause
-	Applications:
-		\begin{itemize}
-			\item Games
-			\item robotics
-			\item autonomous systems
-		\end{itemize}
-\end{frame}
-
-
-% Planning and Timeline
-
-\begin{frame}
-	\frametitle{Project Planning \& Timeline}
-	\vspace{0.2cm}
-	\includegraphics[scale=0.45]{project-plan}
-\end{frame}
-
-\begin{frame}
-	\frametitle{Software Stack}
-	\vspace{1cm}
-	\begin{itemize}
-		\item Python
-		\item numpy (for matrix calculations)
-		\item pygame (fast UI)
-		\item Web frameworks
-		\item tensorflow (for ML implementation)
-	\end{itemize}	
-\end{frame}
-
-\begin{frame}
-	\frametitle{Future Work}
-	\vspace{0.5cm}
-	\begin{itemize}
-		\item Fine-tuning the DQN model for improved decision-making
-		\item Incorporating advanced techniques like Double DQN and Dueling DQN
-		\item Testing against human players to evaluate real-world performance
-		\item Extending the approach to other board games or strategy games (some side-projects)
-	\end{itemize}
-\end{frame}
 
 
 \begin{frame}

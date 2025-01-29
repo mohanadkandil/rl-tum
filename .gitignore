@@ -1,0 +1,26 @@
+# Python
+venv/
+venv_310/
+__pycache__/
+checkpoints/
+
+# Terraform
+infra/.terraform/
+infra/.terraform.lock.hcl
+infra/terraform.tfstate
+infra/terraform.tfstate.backup
+infra/*.tfstate
+infra/*.tfstate.*
+infra/crash.log
+infra/.terraform/
+**/.terraform/providers/**
+
+# Lambda packages
+*.zip
+lambda_package/
+
+# Temp files
+temp/
+
+# Credentials
+config.env

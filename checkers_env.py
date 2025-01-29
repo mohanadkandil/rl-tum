@@ -111,24 +111,29 @@ class checkers_env:
         return 0 <= row < self.board_size and 0 <= col < self.board_size
 
     def step(self, action, player):
-        """Execute move and return new state, reward, and done"""
+        """Execute move and return new state, reward, additional_moves, and done"""
         try:
             start_row, start_col, end_row, end_col = action
             piece = self.board[start_row][start_col]
             reward = 0
-            done = False  # Initialize done flag
+            done = False
+            additional_moves = []  # Initialize empty list for additional moves
             
             # Make the move
             self.board[start_row][start_col] = 0
             self.board[end_row][end_col] = piece
             
-            # Immediate rewards for good actions
-            if abs(start_row - end_row) == 2:  # Capture
+            # Capture reward
+            if abs(start_row - end_row) == 2:
                 mid_row = (start_row + end_row) // 2
                 mid_col = (start_col + end_col) // 2
                 captured_piece = self.board[mid_row][mid_col]
                 self.board[mid_row][mid_col] = 0
-                reward += 5 if abs(captured_piece) == 2 else 2  # More for capturing kings
+                reward += 5 if abs(captured_piece) == 2 else 2
+                
+                # Check for additional captures
+                additional_moves = [move for move in self.valid_moves(player) 
+                                  if move[0] == end_row and move[1] == end_col and abs(move[2] - move[0]) == 2]
             
             # King promotion
             if (player == 1 and end_row == self.board_size-1) or (player == -1 and end_row == 0):
@@ -137,11 +142,11 @@ class checkers_env:
             
             # Position rewards
             if player == 1:
-                reward += 0.1 * (end_row - start_row)  # Small reward for forward movement
+                reward += 0.1 * (end_row - start_row)
             else:
                 reward += 0.1 * (start_row - end_row)
             
-            # Game outcome
+            # Check win conditions
             winner = self.game_winner(self.board)
             if winner == player:
                 reward += 10
@@ -150,7 +155,7 @@ class checkers_env:
                 reward -= 10
                 done = True
             
-            return self.board, reward, done
+            return self.board, reward, additional_moves, done
             
         except ValueError as e:
             raise ValueError("Invalid move")

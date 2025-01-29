@@ -124,7 +124,6 @@ def train_agent(episodes=None):
             # Train more frequently
             if len(agent.memory) > agent.batch_size:
                 agent.replay()
-                # Decay epsilon after each replay (more gradual)
                 if agent.epsilon > agent.epsilon_min:
                     agent.epsilon = max(agent.epsilon_min, agent.epsilon * agent.epsilon_decay)
             
@@ -138,7 +137,7 @@ def train_agent(episodes=None):
                 break
                 
             action = random.choice(valid_moves)
-            next_state, reward, _, done = env.step(action, env.player)
+            next_state, reward, _, done = env.step(action, env.player)  # Ignore additional_moves for random opponent
             moves_made += 1
             
             if done:

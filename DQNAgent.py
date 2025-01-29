@@ -150,7 +150,7 @@ class DQNAgent:
         self.target_network = create_network()
         
         # Use mixed precision training only if CUDA is available
-        self.scaler = torch.cuda.amp.GradScaler() if torch.cuda.is_available() else None
+        self.scaler = torch.amp.GradScaler('cuda') if torch.cuda.is_available() else None
         
         # Move optimizer to GPU
         self.optimizer = optim.Adam(self.q_network.parameters(), lr=self.learning_rate)

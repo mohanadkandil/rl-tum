@@ -4,6 +4,7 @@ from gui import CheckersGUI
 from DQNAgent import DQNAgent
 import torch
 import math
+import os
 
 class Menu:
     def __init__(self):
@@ -137,9 +138,30 @@ class Menu:
 
     def start_game(self):
         agent = DQNAgent(state_size=36, action_size=1296, hidden_size=256)
-        checkpoint = torch.load('checkpoints/final_model.pt', weights_only=True)
-        agent.q_network.load_state_dict(checkpoint['model_state_dict'])
-        agent.epsilon = 0
+        
+        # Try different model paths
+        model_paths = [
+            'checkpoints/final_model.pt',
+            'checkpoints/best_model.pth',
+            'checkpoints/model_final_e100.pth'
+        ]
+        
+        model_loaded = False
+        for path in model_paths:
+            try:
+                if os.path.exists(path):
+                    print(f"Loading model from {path}")
+                    checkpoint = torch.load(path)
+                    agent.q_network.load_state_dict(checkpoint['model_state_dict'])
+                    agent.epsilon = 0  # No exploration in play mode
+                    model_loaded = True
+                    break
+            except Exception as e:
+                print(f"Error loading {path}: {e}")
+                continue
+        
+        if not model_loaded:
+            print("No trained model found. Using untrained agent.")
         
         game = CheckersGUI()
         game.player_turn = -1

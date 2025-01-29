@@ -1,0 +1,277 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% TUM-Vorlage: Präsentation
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+% Rechteinhaber:
+%     Technische Universität München
+%     https://www.tum.de
+% 
+% Gestaltung:
+%     ediundsepp Gestaltungsgesellschaft, München
+%     http://www.ediundsepp.de
+% 
+% Technische Umsetzung:
+%     eWorks GmbH, Frankfurt am Main
+%     http://www.eworks.de
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Zur Wahl des Seitenverhältnisses bitte einen der beiden folgenden Befehle
+% auskommentieren und den ausführen lassen:
+% \input{./Ressourcen/Praesentation/Praeambel4zu3.tex} % Seitenverhältnis 4:3
+\input{./Ressourcen/Praesentation/Praeambel16zu9.tex} % Seitenverhältnis 16:9
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\input{./_Einstellungen.tex}                    % !!! DATEI ANPASSEN !!!
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\renewcommand{\PersonTitel}{}
+\newcommand{\Datum}{\today}
+
+\renewcommand{\PraesentationFusszeileZusatz}{}
+
+\title{Checkmate with AI}
+\subtitle{Mastering Strategy Through Reinforcement Learning}
+\author{Alexandros Stathakopoulos, Mohanad Kandil}
+\institute[]{\UniversitaetName}
+\date[\Datum]{Heilbronn, 09. Dezember 2024}
+\subject{}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\input{./Ressourcen/Praesentation/Anfang.tex} % !!! NICHT ENTFERNEN !!!
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\graphicspath{ {Ressourcen/_Bilder/} }
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% FOLIENSTIL: Standard
+\PraesentationMasterStandard
+
+\PraesentationTitelseite % Fügt die Startseite ein
+
+\begin{frame}
+	\frametitle{Agenda}
+	\vspace{0.5cm}
+	\begin{enumerate}
+		\item Historical Background
+		\item Introduction to RL
+		\item Introduction to Deep Q-Learning
+		\item Discussion of Algorithms
+		\item Project Planning
+	\end{enumerate}
+\end{frame}
+
+
+\begin{frame}
+	\frametitle{Historical Background}
+	\vspace{0.5cm}
+	Historical Progression
+	\vspace{-0.2cm}
+	\begin{itemize}
+		\item Rooted in trial-and-error learning (Thorndike's Law of Effect)
+		\item Incorporates dynamic programming and Markov Decision Processes
+	\end{itemize}
+	Advance in Games
+	\vspace{-0.2cm}
+	\begin{itemize}
+		\item \textbf{Samuel's Checkers Player (1959)}: Demonstrated RL in game strategies 
+				\begin{itemize}
+					\item Used a value function for state evaluation
+					\item Pioneered the use of \textbf{minimax strategy} combined with RL concepts
+				\end{itemize}
+		\item\textbf{ TD-Gammon (1992)}: Combined RL with neural networks for complex games (e.g., backgammon)
+	\end{itemize}
+\end{frame}
+
+\begin{frame}
+	\frametitle{Introduction}
+	\vspace{1cm}
+	\centering
+	\includegraphics[scale=0.1]{appleNYC}
+\end{frame}
+
+\begin{frame}
+	\frametitle{Introduction}
+	\vspace{0.5cm}
+	\begin{itemize}
+		\item Checkers is a strategy game involving diagonal moves of pieces and captures by jumping over opponent pieces
+		\item The objective of the project is to create an AI player using reinforcement learning
+		\item Techniques: Q-learning and Deep Q-Networks (DQN)
+	\end{itemize}
+	\centering
+	\includegraphics[scale=0.25]{checkers}
+\end{frame}
+
+
+\begin{frame}
+	\frametitle{What is Reinforcement Learning?}
+	\vspace{0.2cm}
+	\begin{itemize}
+		\item A machine learning paradigm focused on training agents to make sequences of decisions
+		\item Key components:
+		\begin{itemize}
+			\item \textbf{Agent}: Learns to act in an environment
+			\item \textbf{Environment}: The system with which the agent interacts
+			\item  \textbf{Reward}: Feedback signal indicating the success of an action
+		\end{itemize}
+		\item Goal: Maximize cumulative rewards over time
+	\end{itemize}
+	\centering
+	\includegraphics[scale=0.25]{rl_agent_env}
+\end{frame}
+
+
+% Model and algo Slides (WIP)
+
+\begin{frame}
+	\frametitle{Deep Q-Learning}
+	\vspace{0.5cm}
+		\begin{itemize}	
+			\item reinforcement learning technique to find the optimal action-value function $Q(s,a)$
+			\item It maps state-action pairs to their expected future rewards
+		\end{itemize}
+		 \centering
+		\includegraphics[scale=0.15]{dqn_checkers}
+		% Q-Update rule: % $$Q(s,a) = Q(s,a) +  \alpha [r + \gamma  \ max_{a'} \ Q(s',a') - Q(s,a)]$$
+			
+\end{frame}
+
+\begin{frame}
+	\frametitle{Deep Q-Learning: Q-update rule}
+	\vspace{1cm}
+		
+			
+		$$Q^{\text{new}}(s_t, a_t) \leftarrow Q(s_t, a_t) 
+		+ \underbrace{\alpha}_{\text{learning rate}} \cdot 
+		\overbrace{\left( r_t + \underbrace{\gamma}_{\text{discount factor}} 
+		\cdot \underbrace{\max_a Q(s_{t+1}, a)}_{\text{estimate of optimal future value}} 
+		- \underbrace{Q(s_t, a_t)}_{\text{old value}} \right)}^{\text{temporal difference}}$$
+		
+		\vspace{1cm}
+		\pause
+		\centering
+		\textbf{Challenge}: Traditional Q-learning fails for large or continuous state spaces
+\end{frame}
+
+\begin{frame}
+	\frametitle{Deep Q-Learning: Solution }
+	\vspace{0.5cm}
+	Use a \textbf{Deep Neural Network} (DNN) as a function approximator for $Q(s,a)$ instead of a table
+		\begin{itemize}		
+			\item  \textbf{Input}: State $s$, \textbf{Output}: Q-values for all actions $a$
+			\item \textbf{Target Network}: stabilizes training by holding fixed weights for a few updates
+			\item \textbf{Experience Replay}: samples random batches of past experiences $(s,a,r,s')$ to break correlation in training data
+		\end{itemize}
+\end{frame}
+
+\begin{frame}
+	\frametitle{Deep Q-Learning Algorithm}
+	\vspace{1cm}
+	\centering
+	\includegraphics[scale=0.2]{lossfunction}
+\end{frame}
+
+\begin{frame}
+	\frametitle{Deep Q-Learning Algorithm}
+	\vspace{1cm}
+	\centering
+	\includegraphics[scale=0.2]{buffer}
+\end{frame}
+
+
+\begin{frame}
+	\frametitle{Deep Q-Learning Algorithm }
+	\vspace{0.2cm}
+	Use a \textbf{Deep Neural Network} (DNN) as a function approximator for $Q(s,a)$ instead of a table
+		\begin{enumerate}		
+			\pause
+			\item Initialize: \\ Q-Network $Q(s,a;\theta)$ and Target Network $Q'(s,a;\theta^{-})$
+			\pause
+			\item Action Selection: \\ Use an $\epsilon-$ greedy policy to balance exploration vs. exploitation
+			\pause
+			\item Store Experience: \\ Add $(s,a,r,s')$ to a replay buffer
+			\pause
+			\item Train the Network: \\ 
+				\begin{itemize} 
+					 \item sample a minibatch from the buffer
+					 \item Compute target Q-values: $y = r + \gamma \ max_{a'} \ Q'(s',a';\theta^{-})$
+					\item Minimize loss: $L(\theta)=(y-Q(s,a;\theta))^2$
+				\end{itemize}
+			\pause
+			\item Update Target Network: \\ Periodically copy weights: $\theta^{-} \leftarrow \theta$
+
+		\end{enumerate}
+\end{frame}
+
+\begin{frame}
+	\frametitle{Key Improvements and Applications}
+	\vspace{0.5cm}
+	Improvements:
+		\begin{itemize}		
+			\item \textbf{Double DQN}: Reduces overestimation of Q-values
+			\item\textbf{Dueling DQN}: Separates value and advantage functions
+			\item \textbf{Prioritized Experience Replay}: Samples important experiences more frequently
+		\end{itemize}
+	\pause
+	Applications:
+		\begin{itemize}
+			\item Games
+			\item robotics
+			\item autonomous systems
+		\end{itemize}
+\end{frame}
+
+
+% Planning and Timeline
+
+\begin{frame}
+	\frametitle{Project Planning \& Timeline}
+	\vspace{0.2cm}
+	\includegraphics[scale=0.45]{project-plan}
+\end{frame}
+
+\begin{frame}
+	\frametitle{Software Stack}
+	\vspace{1cm}
+	\begin{itemize}
+		\item Python
+		\item numpy (for matrix calculations)
+		\item pygame (fast UI)
+		\item Web frameworks
+		\item tensorflow (for ML implementation)
+	\end{itemize}	
+\end{frame}
+
+\begin{frame}
+	\frametitle{Future Work}
+	\vspace{0.5cm}
+	\begin{itemize}
+		\item Fine-tuning the DQN model for improved decision-making
+		\item Incorporating advanced techniques like Double DQN and Dueling DQN
+		\item Testing against human players to evaluate real-world performance
+		\item Extending the approach to other board games or strategy games (some side-projects)
+	\end{itemize}
+\end{frame}
+
+
+\begin{frame}
+	\frametitle{Thank You}
+	\vspace{1cm}
+	\centering
+	\includegraphics{efficiency} \\
+	xkcd 1445
+\end{frame}
+
+% add here
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\end{document} % !!! NICHT ENTFERNEN !!!
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+

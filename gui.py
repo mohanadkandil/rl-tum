@@ -170,7 +170,7 @@ class CheckersGUI:
 
     def make_move(self, move):
         try:
-            board, reward, additional_moves = self.env.step(move, self.player_turn)
+            board, reward, additional_moves, done = self.env.step(move, self.player_turn)
             
             if not additional_moves:
                 self.player_turn = -self.player_turn
@@ -193,7 +193,12 @@ class CheckersGUI:
             
             if valid_moves:
                 action = agent.act(state, valid_moves)
-                next_state, reward, done = self.env.step(action, 1)
+                next_state, reward, additional_moves, done = self.env.step(action, 1)
+                
+                # Handle additional captures if any
+                while additional_moves and not done:
+                    action = additional_moves[0]
+                    next_state, reward, additional_moves, done = self.env.step(action, 1)
                 
                 if done:
                     self.game_over = True
@@ -265,7 +270,11 @@ class CheckersGUI:
                     
                     if valid_moves:
                         action = agent1.act(state, valid_moves)
-                        next_state, reward, done = self.env.step(action, 1)
+                        next_state, reward, additional_moves, done = self.env.step(action, 1)
+                        
+                        while additional_moves and not done:
+                            action = additional_moves[0]
+                            next_state, reward, additional_moves, done = self.env.step(action, 1)
                         
                         if done:
                             self.game_over = True
@@ -282,7 +291,11 @@ class CheckersGUI:
                     
                     if valid_moves:
                         action = agent2.act(state, valid_moves)
-                        next_state, reward, done = self.env.step(action, -1)
+                        next_state, reward, additional_moves, done = self.env.step(action, -1)
+                        
+                        while additional_moves and not done:
+                            action = additional_moves[0]
+                            next_state, reward, additional_moves, done = self.env.step(action, -1)
                         
                         if done:
                             self.game_over = True

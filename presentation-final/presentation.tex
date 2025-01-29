@@ -69,12 +69,11 @@
 
 % Slide 2: Introduction - Background & Motivation
 \begin{frame}
-    \frametitle{Introduction - Background \& Motivation}
+    \frametitle{Introduction - Background}
     \begin{itemize}
-        \item Problem Statement: What are we solving?
+        \item Problem Statement: Implement an AI, which can play checkers against the player
         \item Why is reinforcement learning important?
-        \item Brief mention of prior research
-        \item Project Goal: Train an AI agent using RL
+        \item Project Goal: Train a RL gent, which can play checkers
     \end{itemize}
 \end{frame}
 
@@ -100,7 +99,7 @@
         \item Experience Replay to improve stability
     \end{itemize}
     \centering
-    % \includegraphics[scale=0.2]{dqn_checkers}
+    \includegraphics[scale=0.17]{dqn_checkers}
 \end{frame}
 
 % Slide 5: Code Structure & Implementation
@@ -108,11 +107,12 @@
     \frametitle{Code Structure \& Implementation}
     \begin{itemize}
         \item Overview of Repository Structure
-        \item Key Libraries: Python, TensorFlow/PyTorch, NumPy, OpenAI Gym
+        \item Key Libraries: Python, PyTorch, NumPy
         \item Training and Evaluation Pipeline
     \end{itemize}
     \centering
-    % \includegraphics[scale=0.2]{code_structure}
+     \vspace{-1.5cm}
+    \includegraphics[scale=0.5]{code_structure}
 \end{frame}
 
 % Slide 6: Algorithm Performance & Results
@@ -120,11 +120,9 @@
     \frametitle{Algorithm Performance \& Results}
     \begin{itemize}
         \item Performance Metrics: Reward over Episodes
-        \item Training Loss over Iterations
-        \item Baseline Model Comparison
     \end{itemize}
     \centering
-   %  \includegraphics[scale=0.3]{performance_graphs}
+   \includegraphics[scale=0.6]{performance}
 \end{frame}
 
 % Slide 7: Implications
@@ -141,11 +139,13 @@
 \begin{frame}
     \frametitle{Limitations}
     \begin{itemize}
-        \item High computational cost
-        \item Sample inefficiency
-        \item Lack of interpretability
+        \item High computational cost (even with latest GPUs)
+        \item Inefficiency
         \item Generalization issues across different environments
     \end{itemize}
+    \centering
+    \vspace{-0.4cm}
+    \includegraphics[scale=0.75]{h100}
 \end{frame}
 
 % Slide 9: Conclusion & Summary

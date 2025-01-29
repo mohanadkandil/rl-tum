@@ -137,38 +137,46 @@ class Menu:
             clock.tick(60)
 
     def start_game(self):
-        agent = DQNAgent(state_size=36, action_size=1296, hidden_size=256)
-        
-        # Try different model paths
-        model_paths = [
-            'checkpoints/final_model.pt',
-            'checkpoints/best_model.pth',
-            'checkpoints/model_final_e100.pth'
-        ]
-        
-        model_loaded = False
-        for path in model_paths:
-            try:
-                if os.path.exists(path):
-                    print(f"Loading model from {path}")
-                    checkpoint = torch.load(path)
-                    agent.q_network.load_state_dict(checkpoint['model_state_dict'])
-                    agent.epsilon = 0  # No exploration in play mode
-                    model_loaded = True
-                    break
-            except Exception as e:
-                print(f"Error loading {path}: {e}")
-                continue
-        
-        if not model_loaded:
-            print("No trained model found. Using untrained agent.")
-        
-        game = CheckersGUI()
-        game.player_turn = -1
-        game.run(agent)
-        
-        # Reinitialize pygame display for menu after game ends
-        self.screen = pygame.display.set_mode((self.WIDTH, self.HEIGHT))
+        try:
+            # Initialize agent with correct parameters
+            agent = DQNAgent(state_size=36, action_size=1296)
+            
+            # Try different model paths
+            model_paths = [
+                'checkpoints/final_model.pt',
+                'checkpoints/best_model.pth',
+                'checkpoints/model_final_e100.pth'
+            ]
+            
+            model_loaded = False
+            for path in model_paths:
+                try:
+                    if os.path.exists(path):
+                        print(f"Loading model from {path}")
+                        checkpoint = torch.load(path, map_location='cpu', weights_only=True)
+                        agent.q_network.load_state_dict(checkpoint['model_state_dict'])
+                        agent.epsilon = 0  # No exploration in play mode
+                        model_loaded = True
+                        break
+                except Exception as e:
+                    print(f"Error loading {path}: {e}")
+                    continue
+            
+            if not model_loaded:
+                print("No trained model found. Using untrained agent.")
+            
+            game = CheckersGUI()
+            game.player_turn = -1  # Human starts as white (-1), AI is red (1)
+            game.run(agent)
+            
+        except Exception as e:
+            print(f"Game error: {e}")
+        finally:
+            # Properly reinitialize pygame
+            pygame.quit()
+            pygame.init()
+            pygame.display.set_mode((self.WIDTH, self.HEIGHT))
+            self.screen = pygame.display.get_surface()
 
 if __name__ == "__main__":
     menu = Menu()

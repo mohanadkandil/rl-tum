@@ -111,15 +111,12 @@ class checkers_env:
         return 0 <= row < self.board_size and 0 <= col < self.board_size
 
     def step(self, action, player):
+        """Execute move and return new state, reward, and done"""
         try:
             start_row, start_col, end_row, end_col = action
             piece = self.board[start_row][start_col]
             reward = 0
             done = False  # Initialize done flag
-            
-            # Store initial state
-            initial_pieces = np.sum(self.board * player > 0)
-            initial_kings = np.sum(np.abs(self.board * player) == 2)
             
             # Make the move
             self.board[start_row][start_col] = 0
@@ -132,12 +129,6 @@ class checkers_env:
                 captured_piece = self.board[mid_row][mid_col]
                 self.board[mid_row][mid_col] = 0
                 reward += 5 if abs(captured_piece) == 2 else 2  # More for capturing kings
-                
-                # Check for additional captures
-                additional_moves = [move for move in self.valid_moves(player) 
-                                  if move[0] == end_row and move[1] == end_col and abs(move[2] - move[0]) == 2]
-                if additional_moves:
-                    return self.board, reward, additional_moves, False  # Not done if more captures available
             
             # King promotion
             if (player == 1 and end_row == self.board_size-1) or (player == -1 and end_row == 0):
@@ -159,7 +150,7 @@ class checkers_env:
                 reward -= 10
                 done = True
             
-            return self.board, reward, [], done  # Return empty list for no additional moves
+            return self.board, reward, done
             
         except ValueError as e:
             raise ValueError("Invalid move")

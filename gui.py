@@ -167,6 +167,28 @@ class CheckersGUI:
         except ValueError as e:
             print(f"Invalid move: {e}")
 
+    def handle_ai_move(self, agent):
+        """Handle AI move"""
+        if self.player_turn == 1:  # AI plays as red (1)
+            state = self.env.board.flatten()
+            valid_moves = self.env.valid_moves(1)  # Get moves for red
+            
+            if valid_moves:
+                action = agent.act(state, valid_moves)
+                next_state, reward, done = self.env.step(action, 1)  # AI makes move as red
+                
+                if done:
+                    print("Game over!")
+                    return True
+                    
+                self.player_turn = -1  # Switch to human player (white)
+                
+            else:
+                print("AI has no valid moves")
+                return True
+                
+        return False
+
     def run(self, agent=None):
         clock = pygame.time.Clock()
         running = True
@@ -175,9 +197,8 @@ class CheckersGUI:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
-                elif event.type == pygame.MOUSEBUTTONDOWN and not self.game_over:
-                    pos = pygame.mouse.get_pos()
-                    self.handle_click(pos)
+                elif event.type == pygame.MOUSEBUTTONDOWN and self.player_turn == -1:
+                    self.handle_click(event.pos)
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_r:  # Reset game
                         self.__init__()
@@ -185,12 +206,10 @@ class CheckersGUI:
                     elif event.key == pygame.K_q:  # Quit game
                         running = False
 
-            # AI move if it's AI's turn and we have an agent
-            if agent and self.player_turn == 1 and not self.game_over:  # Changed to 1 for red
-                valid_moves = self.env.valid_moves(1)  # AI plays as red (1)
-                if valid_moves:
-                    action = agent.act(self.env.board, valid_moves)
-                    self.make_move(action)
+            # AI move if it's AI's turn
+            if agent and self.player_turn == 1 and not self.game_over:  # AI plays as red (1)
+                if self.handle_ai_move(agent):
+                    continue
 
             self.update_display()
             clock.tick(60)

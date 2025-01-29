@@ -81,6 +81,9 @@ def evaluate_agent(agent, env):
     return wins / EVAL_EPISODES
 
 def train_agent(episodes=None):
+    import time
+    start_time = time.time()  # Add this at the start
+    
     # Use arguments if episodes not specified
     if episodes is None:
         args = parse_args()
@@ -102,7 +105,6 @@ def train_agent(episodes=None):
     
     print(f"Starting training for {episodes} episodes...")
     best_win_rate = 0
-    start_time = time.time()
     
     for episode in range(episodes):
         state = env.reset()
@@ -168,27 +170,21 @@ def train_agent(episodes=None):
                 best_win_rate = win_rate
                 print(f"New best win rate: {win_rate:.2%}!")
                 
-                # Save model checkpoint
+                # Save model checkpoint (without optimizer state)
                 best_model_path = os.path.join(checkpoint_dir, 'best_model.pth')
                 torch.save({
                     'episode': episode,
                     'model_state_dict': agent.q_network.state_dict(),
-                    'optimizer_state_dict': agent.optimizer.state_dict(),
                     'win_rate': win_rate,
                     'epsilon': agent.epsilon
                 }, best_model_path)
                 
-                # Save training plot
+                # Save training plot with lower resolution
                 plot_path = os.path.join(checkpoint_dir, 'training_results.png')
+                plt.figure(figsize=(8, 4), dpi=72)  # Lower resolution
                 plot_training_results(rewards, win_rates, eval_frequency, save_path=plot_path)
-                
-                # Upload to API
-                try:
-                    result = upload_model(best_model_path, plot_path)
-                    print(f"Upload successful: {result}")
-                except Exception as e:
-                    print(f"Upload failed: {e}")
-    
+                plt.close()
+        
     # Save and upload final model
     final_model_path = os.path.join(checkpoint_dir, f'model_final_e{episodes}.pth')
     torch.save({
@@ -198,20 +194,29 @@ def train_agent(episodes=None):
         'win_rate': win_rates[-1],
         'epsilon': agent.epsilon
     }, final_model_path)
-    
-    # Upload final model
-    s3_handler = S3Handler()
-    s3_handler.upload_training(
-        checkpoint_path=final_model_path,
-        plot_path=plot_path,
-        training_info={
-            'win_rate': win_rates[-1],
-            'episodes': episodes,
-            'final_reward': rewards[-1],
-            'duration': time.time() - start_time,
-            'is_final': True
-        }
-    )
+
+   # Upload to API
+    try:
+        # Calculate training duration
+        training_duration = time.time() - start_time  # Add start_time at beginning of training
+        
+        # Get final reward from last episode
+        final_reward = rewards[-1] if rewards else 0
+        
+        # Get final win rate
+        win_rate = win_rates[-1] if win_rates else 0
+        
+        # Upload with metadata
+        result = upload_model(
+            checkpoint_dir=checkpoint_dir,
+            episodes=episodes,
+            final_reward=final_reward,
+            training_duration=training_duration,
+            win_rate=win_rate
+        )
+        print(f"Upload successful: {result}")
+    except Exception as e:
+        print(f"Upload failed: {e}")
     
     print(f"Training complete! Best win rate: {best_win_rate:.2%}")
     print(f"Models saved in {checkpoint_dir}/")

@@ -1,47 +1,39 @@
 import json
 import boto3
 import base64
-import os
+from datetime import datetime
 
 def handler(event, context):
     s3 = boto3.client('s3')
-    dynamodb = boto3.resource('dynamodb').Table('checkers-ai-model-metadata-dev')
+    bucket = 'checkers-ai-models-dev-20250129'
     
     try:
-        body = json.loads(event['body'])
-        model_data = base64.b64decode(body['model'])
-        plot_data = base64.b64decode(body['plot'])
+        # Get files from multipart form
+        body = event['body']
         
-        # Generate unique checkpoint number
-        timestamp = event['requestContext']['requestTime']
-        checkpoint_num = str(int(timestamp.replace('-','').replace(':','').replace('T','')))
+        # Generate folder name
+        timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+        folder = f"checkpoints/checkpoint_{timestamp}"
         
-        # Upload to S3
+        # Upload files to S3
         s3.put_object(
-            Bucket='checkers-ai-models-dev',
-            Key=f'checkpoints/checkpoint_{checkpoint_num}/model.pth',
-            Body=model_data
-        )
-        s3.put_object(
-            Bucket='checkers-ai-models-dev',
-            Key=f'checkpoints/checkpoint_{checkpoint_num}/training_plot.png',
-            Body=plot_data
+            Bucket=bucket,
+            Key=f"{folder}/model.pth",
+            Body=body['model']
         )
         
-        # Update DynamoDB
-        dynamodb.put_item(Item={
-            'model_id': f'checkpoint_{checkpoint_num}',
-            'checkpoint_number': checkpoint_num,
-            'timestamp': timestamp,
-            'model_s3_path': f'checkpoints/checkpoint_{checkpoint_num}/model.pth',
-            'plot_s3_path': f'checkpoints/checkpoint_{checkpoint_num}/training_plot.png'
-        })
+        s3.put_object(
+            Bucket=bucket,
+            Key=f"{folder}/plot.png",
+            Body=body['plot']
+        )
         
         return {
             'statusCode': 200,
             'body': json.dumps({'message': 'Upload successful'})
         }
     except Exception as e:
+        print(f"Error: {str(e)}")
         return {
             'statusCode': 500,
             'body': json.dumps({'error': str(e)})

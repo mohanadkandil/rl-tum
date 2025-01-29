@@ -5,18 +5,28 @@ from DQNAgent import DQNAgent
 import matplotlib.pyplot as plt
 import os
 import random
+import argparse
+import math
 
 # Training parameters
-EPISODES = 200
-EVAL_FREQUENCY = 100
-EVAL_EPISODES = 30
-BATCH_SIZE = 128
-TARGET_UPDATE = 200
-MEMORY_SIZE = 50000
+EPISODES = 1000
+EVAL_FREQUENCY = 50
+EVAL_EPISODES = 50
+BATCH_SIZE = 256
+TARGET_UPDATE = 100
+MEMORY_SIZE = 100000
 LEARNING_RATE = 0.0005
 EPSILON_START = 1.0
 EPSILON_END = 0.05
 EPSILON_DECAY = 0.998
+
+def parse_args():
+    parser = argparse.ArgumentParser(description='Train Checkers AI')
+    parser.add_argument('--episodes', type=int, default=200,
+                       help='Number of episodes to train (default: 200)')
+    parser.add_argument('--eval-frequency', type=int, default=100,
+                       help='How often to evaluate the agent (default: 100)')
+    return parser.parse_args()
 
 def evaluate_agent(agent, env):
     """Evaluate agent performance without exploration"""
@@ -25,7 +35,7 @@ def evaluate_agent(agent, env):
     agent.epsilon = 0  # Turn off exploration
     
     for episode in range(EVAL_EPISODES):
-        env.reset()  # Reset environment
+        state = env.reset()
         done = False
         moves_made = 0
         
@@ -34,19 +44,15 @@ def evaluate_agent(agent, env):
             valid_moves = env.valid_moves(env.player)
             
             if not valid_moves:
-                wins += 1  # AI lost (no moves)
                 break
                 
-            # Get current board state
-            current_state = env.board.copy()  # Make sure we're using the board state
-            action = agent.act(current_state, valid_moves)
-            next_state, reward, additional_moves = env.step(action, env.player)
+            action = agent.act(state, valid_moves)
+            next_state, reward, additional_moves, done = env.step(action, env.player)
             moves_made += 1
             
-            if env.game_winner(env.board) == 1:
-                wins += 1
-                break
-            elif env.game_winner(env.board) == -1:
+            if done:
+                if env.game_winner(next_state) == -1:  # AI won
+                    wins += 1
                 break
                 
             # Random opponent move
@@ -54,124 +60,181 @@ def evaluate_agent(agent, env):
             valid_moves = env.valid_moves(env.player)
             
             if not valid_moves:
+                wins += 1  # AI won if opponent has no moves
                 break
                 
             action = random.choice(valid_moves)
-            next_state, reward, additional_moves = env.step(action, env.player)
+            next_state, reward, _, done = env.step(action, env.player)
             moves_made += 1
             
-            if env.game_winner(env.board) != 0:
-                if env.game_winner(env.board) == -1:
+            if done:
+                if env.game_winner(next_state) == -1:  # AI won
                     wins += 1
                 break
+                
+            state = next_state
     
     agent.epsilon = original_epsilon
     return wins / EVAL_EPISODES
 
-def train_agent():
+def train_agent(episodes=None):
+    # Use arguments if episodes not specified
+    if episodes is None:
+        args = parse_args()
+        episodes = args.episodes
+        eval_frequency = args.eval_frequency
+    else:
+        eval_frequency = 50  # Default if episodes directly specified
+    
     env = checkers_env()
-    agent = DQNAgent(
-        state_size=36,
-        action_size=1296,
-        hidden_size=256
-    )
-    
-    episode_rewards = []
+    agent = DQNAgent()
+    rewards = []
     win_rates = []
+    total_steps = 0
     
-    print(f"Using device: {agent.device}")
+    # Create checkpoints directory if it doesn't exist
+    checkpoint_dir = 'checkpoints'
+    if not os.path.exists(checkpoint_dir):
+        os.makedirs(checkpoint_dir)
     
-    # Create checkpoints directory
-    os.makedirs('checkpoints', exist_ok=True)
+    print(f"Starting training for {episodes} episodes...")
+    best_win_rate = 0
+    best_model_path = os.path.join(checkpoint_dir, 'best_model.pth')
     
-    try:
-        for episode in range(EPISODES):
-            state = env.reset()
-            total_reward = 0
-            done = False
-            moves_made = 0
-            
-            if episode % 10 == 0:
-                print(f"\rEpisode {episode}/{EPISODES}", end="", flush=True)
-            
-            while not done and moves_made < 200:
-                current_state = env.board.copy()
-                valid_moves = env.valid_moves(env.player)
+    for episode in range(episodes):
+        state = env.reset()
+        episode_reward = 0
+        moves_made = 0
+        
+        while moves_made < 200:  # Prevent infinite games
+            # AI turn
+            env.player = -1
+            valid_moves = env.valid_moves(env.player)
+            if not valid_moves:
+                break
                 
-                if not valid_moves:
-                    break
-                    
-                action = agent.act(current_state, valid_moves)
-                next_state, reward, additional_moves = env.step(action, env.player)
-                done = env.game_winner(env.board) != 0
-                agent.remember(current_state, action, reward, next_state, done)
-                
-                if len(agent.memory) >= agent.batch_size:
-                    agent.replay()
-                
-                total_reward += reward
-                moves_made += 1
-                
-                while additional_moves and not done:
-                    action = additional_moves[0]
-                    next_state, reward, additional_moves = env.step(action, env.player)
-                    total_reward += reward
-                    moves_made += 1
-                    done = env.game_winner(env.board) != 0
+            action = agent.act(state, valid_moves)
+            next_state, reward, additional_moves, done = env.step(action, env.player)
+            moves_made += 1
+            total_steps += 1
             
-            episode_rewards.append(total_reward)
+            # Store transition
+            agent.remember(state, action, reward, next_state, done)
             
-            if episode % TARGET_UPDATE == 0:
+            # Train more frequently
+            if len(agent.memory) > agent.batch_size:
+                agent.replay()
+                # Decay epsilon after each replay (more gradual)
+                if agent.epsilon > agent.epsilon_min:
+                    agent.epsilon = max(agent.epsilon_min, agent.epsilon * agent.epsilon_decay)
+            
+            if done:
+                break
+                
+            # Opponent turn
+            env.player = 1
+            valid_moves = env.valid_moves(env.player)
+            if not valid_moves:
+                break
+                
+            action = random.choice(valid_moves)
+            next_state, reward, _, done = env.step(action, env.player)
+            moves_made += 1
+            
+            if done:
+                break
+                
+            state = next_state
+            episode_reward += reward
+            
+            # Update target network periodically
+            if total_steps % 1000 == 0:  # More frequent updates
                 agent.update_target_network()
-                print(f"\nUpdating target network at episode {episode}")
+        
+        rewards.append(episode_reward)
+        
+        # Evaluate periodically
+        if episode % eval_frequency == 0:
+            win_rate = evaluate_agent(agent, env)
+            win_rates.append(win_rate)
+            print(f"Episode {episode}/{episodes}, Win Rate: {win_rate:.2%}, "
+                  f"Epsilon: {agent.epsilon:.3f}, Reward: {episode_reward:.1f}")
             
-            if (episode + 1) % EVAL_FREQUENCY == 0:
-                win_rate = evaluate_agent(agent, env)
-                win_rates.append(win_rate)
-                print(f"\nEpisode {episode + 1}/{EPISODES}")
-                print(f"Average Reward: {np.mean(episode_rewards[-100:]):.2f}")
-                print(f"Win Rate: {win_rate:.2%}")
-                print(f"Epsilon: {agent.epsilon:.3f}")
-                print(f"Memory size: {len(agent.memory)}")
-                print("------------------------")
-                
-                # Save checkpoint
+            # Save best model in checkpoints directory
+            if win_rate > best_win_rate:
+                best_win_rate = win_rate
+                print(f"New best win rate: {win_rate:.2%}!")
                 torch.save({
                     'episode': episode,
                     'model_state_dict': agent.q_network.state_dict(),
                     'optimizer_state_dict': agent.optimizer.state_dict(),
                     'win_rate': win_rate,
-                }, f'checkpoints/model_ep{episode+1}.pt')
+                    'epsilon': agent.epsilon
+                }, best_model_path)
     
-    except KeyboardInterrupt:
-        print("\nTraining interrupted by user")
-    
-    # Save final model
+    # Save final model in checkpoints directory
+    final_model_path = os.path.join(checkpoint_dir, f'model_final_e{episodes}.pth')
     torch.save({
+        'episode': episodes,
         'model_state_dict': agent.q_network.state_dict(),
         'optimizer_state_dict': agent.optimizer.state_dict(),
-    }, 'checkpoints/final_model.pt')
+        'win_rate': win_rates[-1],
+        'epsilon': agent.epsilon
+    }, final_model_path)
     
-    return agent, episode_rewards, win_rates
+    # Save training plot in checkpoints directory
+    plot_path = os.path.join(checkpoint_dir, 'training_results.png')
+    plot_training_results(rewards, win_rates, eval_frequency, save_path=plot_path)
+    
+    print(f"Training complete! Best win rate: {best_win_rate:.2%}")
+    print(f"Models saved in {checkpoint_dir}/")
+    
+    return agent, rewards, win_rates, eval_frequency
 
-def plot_training_results(rewards, win_rates):
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 10))
+def plot_training_results(rewards, win_rates, eval_frequency=50, save_path='training_results.png'):
+    plt.figure(figsize=(12, 5))
     
-    ax1.plot(rewards)
-    ax1.set_title('Training Rewards')
-    ax1.set_xlabel('Episode')
-    ax1.set_ylabel('Total Reward')
+    # Plot rewards
+    plt.subplot(1, 2, 1)
+    plt.plot(range(len(rewards)), rewards)
+    plt.title('Training Rewards')
+    plt.xlabel('Episode')
+    plt.ylabel('Total Reward')
     
-    eval_episodes = np.arange(EVAL_FREQUENCY, EPISODES + 1, EVAL_FREQUENCY)
-    ax2.plot(eval_episodes, win_rates)
-    ax2.set_title('Agent Win Rate')
-    ax2.set_xlabel('Episode')
-    ax2.set_ylabel('Win Rate')
+    # Plot win rates
+    plt.subplot(1, 2, 2)
+    # Calculate correct x-axis points for win rates
+    eval_episodes = range(0, len(rewards), eval_frequency)
+    if len(eval_episodes) > len(win_rates):
+        eval_episodes = eval_episodes[:len(win_rates)]
+    plt.plot(eval_episodes, win_rates)
+    plt.title('Agent Win Rate')
+    plt.xlabel('Episode')
+    plt.ylabel('Win Rate')
     
     plt.tight_layout()
-    plt.savefig('training_results.png')
+    plt.savefig(save_path)
     plt.close()
 
+def load_trained_model(model_path):
+    """Load a trained model"""
+    agent = DQNAgent()  
+    
+    if os.path.exists(model_path):
+        checkpoint = torch.load(model_path, map_location=agent.device)
+        agent.q_network.load_state_dict(checkpoint['model_state_dict'])
+        agent.target_network.load_state_dict(checkpoint['model_state_dict'])
+        agent.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        agent.epsilon = checkpoint['epsilon']
+        
+        print(f"Loaded model from {model_path}")
+        print(f"Model win rate: {checkpoint['win_rate']:.2%}")
+        print(f"Model epsilon: {agent.epsilon:.3f}")
+    else:
+        print(f"No model found at {model_path}")
+    
+    return agent
+
 if __name__ == "__main__":
-    trained_agent, rewards, win_rates = train_agent()
-    plot_training_results(rewards, win_rates) 
+    # Train new model
+    trained_agent, rewards, win_rates, eval_frequency = train_agent()

@@ -35,26 +35,34 @@ class ParallelDQN(nn.Module):
 class PriorityReplayBuffer:
     def __init__(self, capacity, alpha):
         self.capacity = capacity
-        self.alpha = alpha  # How much prioritization to use
+        self.alpha = alpha
         self.memory = []
         self.priorities = np.zeros(capacity)
         self.position = 0
-        self.priority_epsilon = 1e-6  # Add this here
+        self.unique_states = set()  # Track unique states
         
     def __len__(self):  # Add this method
         return len(self.memory)
         
     def push(self, state, action, reward, next_state, done):
-        # New experiences get max priority
-        max_priority = np.max(self.priorities) if self.memory else 1.0
+        # Convert state to hashable format
+        state_hash = hash(state.tobytes())
         
-        if len(self.memory) < self.capacity:
-            self.memory.append((state, action, reward, next_state, done))
-        else:
-            self.memory[self.position] = (state, action, reward, next_state, done)
-        
-        self.priorities[self.position] = max_priority
-        self.position = (self.position + 1) % self.capacity
+        # Only add if state is unique or randomly replace
+        if state_hash not in self.unique_states or random.random() < 0.1:
+            max_priority = np.max(self.priorities) if self.memory else 1.0
+            
+            if len(self.memory) < self.capacity:
+                self.memory.append((state, action, reward, next_state, done))
+            else:
+                # Remove old state hash if replacing
+                old_state = self.memory[self.position][0]
+                self.unique_states.remove(hash(old_state.tobytes()))
+                self.memory[self.position] = (state, action, reward, next_state, done)
+            
+            self.priorities[self.position] = max_priority
+            self.position = (self.position + 1) % self.capacity
+            self.unique_states.add(state_hash)
         
     def sample(self, batch_size, beta):
         if len(self.memory) == 0:
@@ -93,13 +101,13 @@ class DQNAgent:
         self.action_size = action_size
         self.memory = PriorityReplayBuffer(100000, 0.6)
         
-        # Enhanced training parameters
-        self.gamma = 0.99  # Discount factor
-        self.epsilon = 1.0  # Starting exploration rate
-        self.epsilon_min = 0.01  # Minimum exploration rate
-        self.epsilon_decay = 0.9995  # More gradual decay (was 0.995)
-        self.learning_rate = 0.0001
-        self.batch_size = 128  # Increased batch size for H100
+        # Training parameters
+        self.gamma = 0.95  # Reduced from 0.99 to prevent too much future reward consideration
+        self.epsilon = 1.0
+        self.epsilon_min = 0.1  # Increased from 0.01 to maintain more exploration
+        self.epsilon_decay = 0.997  # Slower decay
+        self.learning_rate = 0.0005  # Reduced from 0.0001
+        self.batch_size = 64  # Reduced from 128 to prevent overfitting on small datasets
         
         # H100 specific optimizations
         if torch.cuda.is_available():
@@ -128,22 +136,22 @@ class DQNAgent:
         
         def create_network():
             model = nn.Sequential(
-                nn.Linear(state_size, 1024),  # Wider network
+                nn.Linear(state_size, 256),  # Reduced from 1024
                 nn.ReLU(),
-                nn.Dropout(0.2),
-                nn.Linear(1024, 1024),
+                nn.Dropout(0.3),  # Increased dropout
+                nn.Linear(256, 256),  # Reduced from 1024
                 nn.ReLU(),
-                nn.Dropout(0.2),
-                nn.Linear(1024, 512),
-                nn.ReLU(),
-                nn.Linear(512, action_size)
+                nn.Dropout(0.3),
+                nn.Linear(256, action_size)
             )
             
-            model = model.to(self.device)
-            if torch.cuda.device_count() > 1:
-                print(f"Using {torch.cuda.device_count()} GPUs!")
-                return nn.DataParallel(model, device_ids=list(range(torch.cuda.device_count())))
-            return model
+            # Initialize weights with smaller values
+            for layer in model:
+                if isinstance(layer, nn.Linear):
+                    nn.init.xavier_uniform_(layer.weight, gain=0.01)
+                    nn.init.constant_(layer.bias, 0)
+            
+            return model.to(self.device)
         
         # Create networks and ensure they're on GPU
         self.q_network = create_network()
@@ -189,85 +197,49 @@ class DQNAgent:
         if len(self.memory) < self.batch_size:
             return
             
-        batch, indices, weights = self.memory.sample(self.batch_size, self.priority_beta)
-        weights = torch.FloatTensor(weights).to(self.device, non_blocking=True)
+        # Split memory into train and validation (90-10 split)
+        memory_size = len(self.memory)
+        val_size = min(int(memory_size * 0.1), 1000)
+        train_size = memory_size - val_size
         
-        # Prepare batch data efficiently
-        states = torch.from_numpy(np.vstack([s.flatten() for s, _, _, _, _ in batch])).float()
-        next_states = torch.from_numpy(np.vstack([ns.flatten() for _, _, _, ns, _ in batch])).float()
+        # Sample batches
+        train_batch = self.memory.sample(self.batch_size, self.priority_beta)
+        val_batch = self.memory.sample(min(val_size, self.batch_size), self.priority_beta)
         
-        # Handle data transfer based on device
-        if torch.cuda.is_available():
-            # Use CUDA streams for parallel data transfer
-            with torch.cuda.stream(torch.cuda.Stream()):
-                states = states.pin_memory().to(self.device, non_blocking=True)
-                next_states = next_states.pin_memory().to(self.device, non_blocking=True)
-        else:
-            # CPU path - simple transfer
-            states = states.to(self.device)
-            next_states = next_states.to(self.device)
-        
+        # Training
         self.q_network.train()
-        self.target_network.eval()
+        train_loss = self._compute_loss(train_batch)
         
-        # Use mixed precision training only if CUDA is available
-        if torch.cuda.is_available():
-            with torch.cuda.amp.autocast():
-                current_q_values = self.q_network(states)
-                with torch.no_grad():
-                    next_q_values = self.target_network(next_states)
-                
-                target = current_q_values.clone()
-                td_errors = []
-                
-                for i, (_, action, reward, _, done) in enumerate(batch):
-                    if done:
-                        target_value = reward
-                    else:
-                        target_value = reward + self.gamma * torch.max(next_q_values[i])
-                    
-                    current_value = current_q_values[i][self.encode_action(action)]
-                    td_error = abs(target_value - current_value.item())
-                    td_errors.append(td_error)
-                    
-                    target[i][self.encode_action(action)] = target_value
-                
-                losses = F.mse_loss(current_q_values, target, reduction='none')
-                weighted_loss = (weights.unsqueeze(1) * losses.mean(dim=1)).mean()
-            
-            self.optimizer.zero_grad()
-            self.scaler.scale(weighted_loss).backward()
-            self.scaler.step(self.optimizer)
-            self.scaler.update()
+        # Validation
+        self.q_network.eval()
+        with torch.no_grad():
+            val_loss = self._compute_loss(val_batch)
+        
+        # Early stopping check
+        if hasattr(self, 'best_val_loss'):
+            if val_loss < self.best_val_loss:
+                self.best_val_loss = val_loss
+                self.patience_counter = 0
+            else:
+                self.patience_counter += 1
+                if self.patience_counter >= 5:  # Early stopping patience
+                    self.epsilon = max(self.epsilon_min, self.epsilon * 0.5)  # Reduce exploration faster
         else:
-            # CPU training path
-            current_q_values = self.q_network(states)
-            with torch.no_grad():
-                next_q_values = self.target_network(next_states)
-            
-            target = current_q_values.clone()
-            td_errors = []
-            
-            for i, (_, action, reward, _, done) in enumerate(batch):
-                if done:
-                    target_value = reward
-                else:
-                    target_value = reward + self.gamma * torch.max(next_q_values[i])
-                
-                current_value = current_q_values[i][self.encode_action(action)]
-                td_error = abs(target_value - current_value.item())
-                td_errors.append(td_error)
-                
-                target[i][self.encode_action(action)] = target_value
-            
-            losses = F.mse_loss(current_q_values, target, reduction='none')
-            weighted_loss = (weights.unsqueeze(1) * losses.mean(dim=1)).mean()
-            
-            self.optimizer.zero_grad()
-            weighted_loss.backward()
-            self.optimizer.step()
+            self.best_val_loss = val_loss
+            self.patience_counter = 0
         
-        self.memory.update_priorities(indices, td_errors)
+        # L2 regularization
+        l2_lambda = 0.01
+        l2_reg = torch.tensor(0., device=self.device)
+        for param in self.q_network.parameters():
+            l2_reg += torch.norm(param)
+        train_loss += l2_lambda * l2_reg
+
+        # Optimize
+        self.optimizer.zero_grad()
+        train_loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.q_network.parameters(), 1.0)  # Gradient clipping
+        self.optimizer.step()
         
     def update_target_network(self):
         self.target_network.load_state_dict(self.q_network.state_dict())

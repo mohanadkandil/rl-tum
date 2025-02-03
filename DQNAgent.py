@@ -40,6 +40,7 @@ class PriorityReplayBuffer:
         self.priorities = np.zeros(capacity)
         self.position = 0
         self.unique_states = set()  # Track unique states
+        self.priority_epsilon = 1e-6  # Add this line - small constant to prevent zero priorities
         
     def __len__(self):  # Add this method
         return len(self.memory)
@@ -86,7 +87,7 @@ class PriorityReplayBuffer:
         
     def update_priorities(self, indices, td_errors):
         for idx, error in zip(indices, td_errors):
-            self.priorities[idx] = abs(error) + self.priority_epsilon
+            self.priorities[idx] = abs(error) + self.priority_epsilon  # Now this will work
 
 class DQNAgent:
     def __init__(self, state_size=36, action_size=1296):
@@ -99,15 +100,16 @@ class DQNAgent:
         
         self.state_size = state_size
         self.action_size = action_size
-        self.memory = PriorityReplayBuffer(100000, 0.6)
+        self.memory = PriorityReplayBuffer(100000, alpha=0.6)  # Initialize with alpha
         
         # Training parameters
-        self.gamma = 0.95  # Reduced from 0.99 to prevent too much future reward consideration
-        self.epsilon = 1.0
-        self.epsilon_min = 0.1  # Increased from 0.01 to maintain more exploration
-        self.epsilon_decay = 0.997  # Slower decay
-        self.learning_rate = 0.0005  # Reduced from 0.0001
-        self.batch_size = 64  # Reduced from 128 to prevent overfitting on small datasets
+        self.gamma = 0.95  # Discount factor
+        self.epsilon = 1.0  # Starting exploration rate
+        self.epsilon_min = 0.1  # Minimum exploration rate
+        self.epsilon_decay = 0.997  # Exploration decay rate
+        self.learning_rate = 0.0005
+        self.batch_size = 64
+        self.priority_beta = 0.4  # Add this line - importance sampling parameter
         
         # H100 specific optimizations
         if torch.cuda.is_available():
@@ -169,7 +171,6 @@ class DQNAgent:
         
         # Add priority replay parameters
         self.priority_alpha = 0.6  # How much prioritization to use (0 = uniform, 1 = full prioritization)
-        self.priority_beta = 0.4   # Importance sampling correction (starts low, annealed to 1)
         self.priority_epsilon = 1e-6  # Small constant to prevent zero priorities
         
     def remember(self, state, action, reward, next_state, done):
@@ -197,49 +198,38 @@ class DQNAgent:
         if len(self.memory) < self.batch_size:
             return
             
-        # Split memory into train and validation (90-10 split)
-        memory_size = len(self.memory)
-        val_size = min(int(memory_size * 0.1), 1000)
-        train_size = memory_size - val_size
+        # Sample batch
+        batch, indices, weights = self.memory.sample(self.batch_size, self.priority_beta)
+        weights = torch.FloatTensor(weights).to(self.device)
         
-        # Sample batches
-        train_batch = self.memory.sample(self.batch_size, self.priority_beta)
-        val_batch = self.memory.sample(min(val_size, self.batch_size), self.priority_beta)
-        
-        # Training
+        # Compute loss
         self.q_network.train()
-        train_loss = self._compute_loss(train_batch)
+        loss = self._compute_loss(batch)
         
-        # Validation
-        self.q_network.eval()
-        with torch.no_grad():
-            val_loss = self._compute_loss(val_batch)
-        
-        # Early stopping check
-        if hasattr(self, 'best_val_loss'):
-            if val_loss < self.best_val_loss:
-                self.best_val_loss = val_loss
-                self.patience_counter = 0
-            else:
-                self.patience_counter += 1
-                if self.patience_counter >= 5:  # Early stopping patience
-                    self.epsilon = max(self.epsilon_min, self.epsilon * 0.5)  # Reduce exploration faster
-        else:
-            self.best_val_loss = val_loss
-            self.patience_counter = 0
-        
-        # L2 regularization
-        l2_lambda = 0.01
-        l2_reg = torch.tensor(0., device=self.device)
-        for param in self.q_network.parameters():
-            l2_reg += torch.norm(param)
-        train_loss += l2_lambda * l2_reg
-
-        # Optimize
+        # Update network
         self.optimizer.zero_grad()
-        train_loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.q_network.parameters(), 1.0)  # Gradient clipping
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.q_network.parameters(), 1.0)  # Add gradient clipping
         self.optimizer.step()
+        
+        # Update priorities in replay buffer
+        with torch.no_grad():
+            td_errors = self._compute_td_errors(batch)
+        self.memory.update_priorities(indices, td_errors.cpu().numpy())
+
+    def _compute_td_errors(self, batch):
+        """Compute TD errors for prioritized replay"""
+        states = torch.FloatTensor(np.vstack([s.flatten() for s, _, _, _, _ in batch])).to(self.device)
+        next_states = torch.FloatTensor(np.vstack([ns.flatten() for _, _, _, ns, _ in batch])).to(self.device)
+        actions = torch.LongTensor([[self.encode_action(a)] for _, a, _, _, _ in batch]).to(self.device)
+        rewards = torch.FloatTensor([r for _, _, r, _, _ in batch]).to(self.device)
+        dones = torch.FloatTensor([d for _, _, _, _, d in batch]).to(self.device)
+        
+        current_q_values = self.q_network(states).gather(1, actions).squeeze()
+        next_q_values = self.target_network(next_states).max(1)[0]
+        target_q_values = rewards + (1 - dones) * self.gamma * next_q_values
+        
+        return torch.abs(target_q_values - current_q_values)
         
     def update_target_network(self):
         self.target_network.load_state_dict(self.q_network.state_dict())
@@ -249,3 +239,24 @@ class DQNAgent:
         start_pos = action[0] * 6 + action[1]
         end_pos = action[2] * 6 + action[3]
         return start_pos * 6 + end_pos 
+
+    def _compute_loss(self, batch):
+        """Compute loss for a batch of transitions"""
+        states = torch.FloatTensor(np.vstack([s.flatten() for s, _, _, _, _ in batch])).to(self.device)
+        next_states = torch.FloatTensor(np.vstack([ns.flatten() for _, _, _, ns, _ in batch])).to(self.device)
+        actions = torch.LongTensor([[self.encode_action(a)] for _, a, _, _, _ in batch]).to(self.device)
+        rewards = torch.FloatTensor([r for _, _, r, _, _ in batch]).to(self.device)
+        dones = torch.FloatTensor([d for _, _, _, _, d in batch]).to(self.device)
+        
+        # Get current Q values
+        current_q_values = self.q_network(states).gather(1, actions)
+        
+        # Compute target Q values
+        with torch.no_grad():
+            next_q_values = self.target_network(next_states).max(1)[0]
+            target_q_values = rewards + (1 - dones) * self.gamma * next_q_values
+        
+        # Compute loss with Huber loss (more stable than MSE)
+        loss = F.smooth_l1_loss(current_q_values, target_q_values.unsqueeze(1))
+        
+        return loss 

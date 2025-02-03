@@ -1,17 +1,24 @@
 import torch
 from DQNAgent import DQNAgent
 from gui import CheckersGUI
+import os
 
-def load_trained_model(model_path='checkpoints/final_model.pt'):
-    agent = DQNAgent(
-        state_size=36,
-        action_size=1296,
-        hidden_size=256
-    )
+def load_trained_model(model_path='checkpoints/best_model.pth'):
+    # Initialize agent without hidden_size parameter
+    agent = DQNAgent(state_size=36, action_size=1296)
     
-    checkpoint = torch.load(model_path, weights_only=True)
-    agent.q_network.load_state_dict(checkpoint['model_state_dict'])
-    agent.epsilon = 0  # No exploration during play
+    try:
+        if os.path.exists(model_path):
+            print(f"Loading model from {model_path}")
+            checkpoint = torch.load(model_path, map_location='cpu')
+            agent.q_network.load_state_dict(checkpoint['model_state_dict'])
+            agent.target_network.load_state_dict(checkpoint['model_state_dict'])
+            agent.epsilon = 0  # No exploration during play
+            print("Model loaded successfully")
+        else:
+            print(f"No model found at {model_path}")
+    except Exception as e:
+        print(f"Error loading model: {e}")
     
     return agent
 

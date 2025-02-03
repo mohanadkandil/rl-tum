@@ -141,14 +141,14 @@ class Menu:
 
     def start_game(self):
         try:
-            # Initialize agent with correct parameters
+            # Initialize agent
             agent = DQNAgent(state_size=36, action_size=1296)
             
             # Try different model paths
             model_paths = [
-                'checkpoints/final_model.pt',
                 'checkpoints/best_model.pth',
-                'checkpoints/model_final_e100.pth'
+                'checkpoints/final_model.pth',
+                'checkpoints/model_final.pth'
             ]
             
             model_loaded = False
@@ -156,26 +156,32 @@ class Menu:
                 try:
                     if os.path.exists(path):
                         print(f"Loading model from {path}")
-                        checkpoint = torch.load(path, map_location='cpu', weights_only=True)
+                        # Add weights_only=False and map to CPU
+                        checkpoint = torch.load(path, 
+                                             map_location='cpu',
+                                             weights_only=False)
                         agent.q_network.load_state_dict(checkpoint['model_state_dict'])
+                        agent.target_network.load_state_dict(checkpoint['model_state_dict'])
                         agent.epsilon = 0  # No exploration in play mode
                         model_loaded = True
+                        print("Model loaded successfully!")
                         break
                 except Exception as e:
                     print(f"Error loading {path}: {e}")
                     continue
             
             if not model_loaded:
-                print("No trained model found. Using untrained agent.")
+                print("No trained model found. Please train a model first:")
+                print("python train_model.py --episodes 1000")
+                return
             
             game = CheckersGUI()
-            game.player_turn = -1  # Human starts as white (-1), AI is red (1)
+            game.player_turn = -1  # Human starts as white (-1)
             game.run(agent)
             
         except Exception as e:
             print(f"Game error: {e}")
         finally:
-            # Properly reinitialize pygame
             pygame.quit()
             pygame.init()
             pygame.display.set_mode((self.WIDTH, self.HEIGHT))
@@ -184,45 +190,52 @@ class Menu:
     def start_ai_demo(self):
         """Start AI vs AI demo game"""
         try:
-            # Initialize two agents with different exploration strategies
+            # Initialize agents
             agent1 = DQNAgent(state_size=36, action_size=1296)
             agent2 = DQNAgent(state_size=36, action_size=1296)
             
-            # Load models for both agents
             model_paths = [
-                'checkpoints/final_model.pt',
                 'checkpoints/best_model.pth',
-                'checkpoints/model_final_e100.pth'
+                'checkpoints/final_model.pth',
+                'checkpoints/model_final.pth'
             ]
             
-            # Load models for both agents
-            for agent in [agent1, agent2]:
-                model_loaded = False
-                for path in model_paths:
-                    try:
-                        if os.path.exists(path):
-                            print(f"Loading model from {path}")
-                            checkpoint = torch.load(path, map_location='cpu', weights_only=True)
+            model_loaded = False
+            for path in model_paths:
+                try:
+                    if os.path.exists(path):
+                        print(f"Loading model from {path}")
+                        # Add weights_only=False and map to CPU
+                        checkpoint = torch.load(path, 
+                                             map_location='cpu',
+                                             weights_only=False)
+                        
+                        # Load for both agents
+                        for agent in [agent1, agent2]:
                             agent.q_network.load_state_dict(checkpoint['model_state_dict'])
+                            agent.target_network.load_state_dict(checkpoint['model_state_dict'])
                             agent.epsilon = 0  # No exploration in demo mode
-                            model_loaded = True
-                            break
-                    except Exception as e:
-                        print(f"Error loading {path}: {e}")
-                        continue
-                
-                if not model_loaded:
-                    print("No trained model found. Using untrained agent.")
+                        
+                        model_loaded = True
+                        print("Model loaded successfully!")
+                        break
+                except Exception as e:
+                    print(f"Error loading {path}: {e}")
+                    continue
+            
+            if not model_loaded:
+                print("No trained model found. Please train a model first:")
+                print("python train_model.py --episodes 1000")
+                return
             
             game = CheckersGUI()
             game.player_turn = 1  # Red starts
-            game.is_demo = True  # Add this flag to GUI
-            game.run_demo(agent1, agent2)  # New method for AI demo
+            game.is_demo = True
+            game.run_demo(agent1, agent2)
             
         except Exception as e:
             print(f"Demo error: {e}")
         finally:
-            # Properly reinitialize pygame
             pygame.quit()
             pygame.init()
             pygame.display.set_mode((self.WIDTH, self.HEIGHT))

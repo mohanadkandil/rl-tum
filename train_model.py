@@ -28,62 +28,76 @@ def parse_args():
                        help='How often to evaluate the agent (default: 100)')
     return parser.parse_args()
 
-def evaluate_agent(agent, env, num_games=50):  # Increased from 20 to 50 for better evaluation
+def evaluate_agent(agent, env, num_games=50, opponent_strategy=None):
     """Evaluate agent performance"""
+    if opponent_strategy is None:
+        opponent_strategy = select_strategic_move
+        
     wins = 0
     draws = 0
     total_moves = 0
     original_epsilon = agent.epsilon
     agent.epsilon = 0.05  # Small exploration during evaluation
     
-    # Track more metrics
-    captures = 0
-    king_promotions = 0
-    
     for game in range(num_games):
         state = env.reset()
         moves = 0
         max_moves = 100
+        game_over = False
         
-        while moves < max_moves:
-            valid_moves = env.valid_moves(env.player)
+        while not game_over and moves < max_moves:
+            # AI's turn (player -1)
+            valid_moves = env.valid_moves(-1)  # AI plays as -1
             if not valid_moves:
+                # AI has no moves, it loses
+                game_over = True
                 break
                 
-            if env.player == -1:  # AI's turn
-                action = agent.act(state, valid_moves)
-                next_state, reward, additional_moves, done = env.step(action, env.player)
-                
-                # Track metrics
-                if abs(action[0] - action[2]) == 2:  # Capture move
-                    captures += 1
-                if next_state[action[2]][action[3]] == -2:  # King promotion
-                    king_promotions += 1
-                    
-            else:  # Opponent's turn - use deterministic strategy
-                action = select_strategic_move(env, valid_moves)
-                next_state, reward, additional_moves, done = env.step(action, env.player)
-            
+            action = agent.act(state, valid_moves)
+            next_state, reward, additional_moves, done = env.step(action, -1)
             state = next_state
-            moves += 1
             
             if done:
                 if env.game_winner(state) == -1:
                     wins += 1
+                game_over = True
                 break
-        
+                
+            # Opponent's turn (player 1)
+            valid_moves = env.valid_moves(1)
+            if not valid_moves:
+                # Opponent has no moves, AI wins
+                wins += 1
+                game_over = True
+                break
+                
+            action = opponent_strategy(env, valid_moves)
+            next_state, reward, additional_moves, done = env.step(action, 1)
+            state = next_state
+            
+            if done:
+                if env.game_winner(state) == -1:
+                    wins += 1
+                game_over = True
+                break
+                
+            moves += 1
+            
         if moves >= max_moves:
             draws += 1
+            
         total_moves += moves
     
     agent.epsilon = original_epsilon
+    
+    # Calculate metrics
     win_rate = wins / num_games
     draw_rate = draws / num_games
-    avg_moves = total_moves / num_games
-    avg_captures = captures / num_games
-    avg_promotions = king_promotions / num_games
+    avg_moves = total_moves / max(1, num_games)
     
-    return win_rate, draw_rate, avg_moves, avg_captures, avg_promotions
+    print(f"Debug - Games: {num_games}, Wins: {wins}, Draws: {draws}")  # Add debug info
+    
+    return win_rate, draw_rate, avg_moves, 0, 0
 
 def select_strategic_move(env, valid_moves):
     """Deterministic opponent strategy"""
@@ -170,68 +184,198 @@ def evaluate_position(board, player):
     
     return score
 
-def train_agent(episodes=5000):
-    env = checkers_env()
-    agent = DQNAgent()
-    rewards = []
-    metrics = []
-    
-    # Early stopping parameters
-    patience = 15  # Increased patience
-    min_improvement = 0.02  # Minimum improvement threshold
-    best_win_rate = 0
-    no_improvement_count = 0
-    
-    # Curriculum learning - start with simpler opponent
-    curriculum_phases = [
-        (0, "random"),      # First 1000 episodes
-        (1000, "basic"),    # Next 1000 episodes
-        (2000, "medium"),   # Next 1000 episodes
-        (3000, "advanced")  # Rest of training
-    ]
-    
-    print("Starting training...")
-    
-    for episode in range(episodes):
-        # Update curriculum phase
-        current_phase = next(phase[1] for phase in curriculum_phases 
-                           if episode >= phase[0])
+def train_episode(agent, env, phase):
+    """Train for one episode with specified opponent phase"""
+    if phase not in {"random", "basic", "medium", "advanced"}:
+        print(f"Invalid phase {phase}, defaulting to random")
+        phase = "random"
         
-        # Train episode
-        episode_reward = train_episode(agent, env, current_phase)
-        rewards.append(episode_reward)
+    state = env.reset()
+    total_reward = 0
+    done = False
+    moves = 0
+    max_moves = 100
+    
+    opponent_strategies = {
+        "random": select_random_move,
+        "basic": select_basic_move,
+        "medium": select_strategic_move,
+        "advanced": select_advanced_move
+    }
+    
+    try:
+        opponent_strategy = opponent_strategies[phase]
         
-        # Evaluate periodically
-        if episode % EVAL_FREQUENCY == 0:
-            metrics = evaluate_with_different_opponents(agent, env)
-            win_rate = metrics['average_win_rate']
-            
-            print(f"\nEpisode {episode}/{episodes}")
-            print(f"Phase: {current_phase}")
-            print(f"Win Rate: {win_rate:.2%}")
-            print(f"Win Rates by Opponent:")
-            for opp, rate in metrics['opponent_win_rates'].items():
-                print(f"  {opp}: {rate:.2%}")
-            
-            # Early stopping check with minimum improvement threshold
-            if win_rate > best_win_rate + min_improvement:
-                best_win_rate = win_rate
-                no_improvement_count = 0
-                save_model(agent, episode, metrics)
-            else:
-                no_improvement_count += 1
-                
-            if no_improvement_count >= patience:
-                print(f"Early stopping at episode {episode}")
-                print("No significant improvement for", patience, "evaluations")
+        while not done and moves < max_moves:
+            # AI's turn
+            valid_moves = env.valid_moves(env.player)
+            if not valid_moves:
                 break
                 
-        # Decay epsilon more gradually
-        if agent.epsilon > EPSILON_END:
-            agent.epsilon = max(EPSILON_END, 
-                              EPSILON_START * (EPSILON_DECAY ** episode))
+            try:
+                action = agent.act(state, valid_moves)
+                next_state, reward, additional_moves, done = env.step(action, env.player)
+                
+                agent.remember(state, action, reward, next_state, done)
+                total_reward += reward
+                
+                # Handle additional captures
+                while additional_moves and not done:
+                    action = additional_moves[0]
+                    next_state, reward, additional_moves, done = env.step(action, env.player)
+                    agent.remember(state, action, reward, next_state, done)
+                    total_reward += reward
+                
+                if done:
+                    break
+                    
+                # Opponent's turn
+                valid_moves = env.valid_moves(-env.player)
+                if not valid_moves:
+                    break
+                    
+                opponent_action = opponent_strategy(env, valid_moves)
+                state, _, additional_moves, done = env.step(opponent_action, -env.player)
+                
+                while additional_moves and not done:
+                    opponent_action = opponent_strategy(env, additional_moves)
+                    state, _, additional_moves, done = env.step(opponent_action, -env.player)
+                
+                moves += 1
+                
+            except Exception as e:
+                print(f"Error during move: {e}")
+                break
+        
+        # Train if enough experiences
+        if len(agent.memory) >= agent.batch_size:
+            try:
+                agent.replay()
+                if moves % TARGET_UPDATE == 0:
+                    agent.update_target_network()
+            except Exception as e:
+                print(f"Error during training: {e}")
+                
+    except Exception as e:
+        print(f"Error during episode: {e}")
+        return 0
+        
+    return total_reward
+
+def save_model(agent, episode, metrics):
+    """Save model with metrics"""
+    os.makedirs('checkpoints', exist_ok=True)
+    torch.save({
+        'episode': episode,
+        'model_state_dict': agent.q_network.state_dict(),
+        'optimizer_state_dict': agent.optimizer.state_dict(),
+        'metrics': metrics,
+    }, f'checkpoints/model_ep{episode}.pth')
     
-    return agent, rewards, metrics
+    # Also save as best model if it's the best so far
+    torch.save({
+        'episode': episode,
+        'model_state_dict': agent.q_network.state_dict(),
+        'optimizer_state_dict': agent.optimizer.state_dict(),
+        'metrics': metrics,
+    }, 'checkpoints/best_model.pth')
+
+def train_agent():
+    args = parse_args()
+    episodes = args.episodes
+    
+    # Add validation tracking
+    validation_scores = []
+    best_val_score = float('-inf')
+    patience = 10
+    patience_counter = 0
+    
+    # Add model snapshots
+    model_snapshots = []
+    snapshot_frequency = episodes // 10  # Save 10 snapshots during training
+    
+    try:
+        env = checkers_env()
+        agent = DQNAgent()
+        rewards = []
+        metrics = []
+        
+        # Training phases with validation
+        phase_ratio = episodes / 5000
+        curriculum_phases = [
+            (0, "random", 0.3),  # Phase, opponent, target win rate
+            (int(1000 * phase_ratio), "basic", 0.5),
+            (int(2000 * phase_ratio), "medium", 0.6),
+            (int(3000 * phase_ratio), "advanced", 0.7)
+        ]
+        
+        print(f"Starting training for {episodes} episodes...")
+        
+        for episode in range(episodes):
+            # Get current phase and target
+            current_phase = next((phase for phase in curriculum_phases 
+                                if episode >= phase[0]), curriculum_phases[-1])
+            phase_name = current_phase[1]
+            target_win_rate = current_phase[2]
+            
+            # Train episode
+            episode_reward = train_episode(agent, env, phase_name)
+            rewards.append(episode_reward)
+            
+            # Regular evaluation
+            if episode % EVAL_FREQUENCY == 0:
+                metrics = evaluate_with_different_opponents(agent, env)
+                win_rate = metrics['average_win_rate']
+                
+                # Validation score combines win rate and target achievement
+                val_score = win_rate - abs(win_rate - target_win_rate)
+                validation_scores.append(val_score)
+                
+                print(f"\nEpisode {episode}/{episodes}")
+                print(f"Phase: {phase_name} (target: {target_win_rate:.1%})")
+                print(f"Win Rate: {win_rate:.2%}")
+                print(f"Validation Score: {val_score:.2f}")
+                
+                # Early stopping with validation score
+                if val_score > best_val_score:
+                    best_val_score = val_score
+                    patience_counter = 0
+                    save_model(agent, episode, metrics)
+                else:
+                    patience_counter += 1
+                
+                # Take model snapshot
+                if episode % snapshot_frequency == 0:
+                    model_snapshots.append({
+                        'episode': episode,
+                        'state_dict': agent.q_network.state_dict().copy(),
+                        'metrics': metrics.copy()
+                    })
+                
+                # Early stopping check
+                if patience_counter >= patience:
+                    print(f"Early stopping at episode {episode}")
+                    print("Selecting best model from snapshots...")
+                    best_snapshot = max(model_snapshots, 
+                                     key=lambda x: x['metrics']['average_win_rate'])
+                    agent.q_network.load_state_dict(best_snapshot['state_dict'])
+                    break
+            
+            # Dynamic epsilon decay based on performance
+            if agent.epsilon > EPSILON_END:
+                decay_rate = EPSILON_DECAY
+                if len(validation_scores) > 1:
+                    # Adjust decay based on recent performance
+                    if validation_scores[-1] < validation_scores[-2]:
+                        decay_rate = decay_rate * 0.9  # Slower decay if performance drops
+                agent.epsilon = max(EPSILON_END, 
+                                 agent.epsilon * decay_rate)
+        
+        return agent, rewards, metrics
+    
+    except Exception as e:
+        print(f"Training error: {e}")
+        return None, [], []
 
 def evaluate_with_different_opponents(agent, env):
     """Evaluate against different opponent strategies"""

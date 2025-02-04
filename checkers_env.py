@@ -117,52 +117,58 @@ class checkers_env:
             piece = self.board[start_row][start_col]
             reward = 0
             done = False
-            additional_moves = []  # Initialize empty list for additional moves
+            additional_moves = []
             
             # Make the move
             self.board[start_row][start_col] = 0
             self.board[end_row][end_col] = piece
             
-            # Capture reward
+            # Capture reward - keep high to encourage aggressive play
             if abs(start_row - end_row) == 2:
                 mid_row = (start_row + end_row) // 2
                 mid_col = (start_col + end_col) // 2
                 captured_piece = self.board[mid_row][mid_col]
                 self.board[mid_row][mid_col] = 0
-                reward += 10 if abs(captured_piece) == 2 else 5  # Higher reward for capturing kings
+                reward += 15 if abs(captured_piece) == 2 else 10  # High reward for captures
                 
                 # Check for additional captures
                 additional_moves = [move for move in self.valid_moves(player) 
                                   if move[0] == end_row and move[1] == end_col and abs(move[2] - move[0]) == 2]
             
-            # Strategic position rewards
+            # Strategic position rewards - encourage forward movement
             if player == 1:  # Red moving down
-                reward += 0.5 * (end_row - start_row)  # Reward forward movement
+                reward += 1.0 * (end_row - start_row)  # Significant reward for forward progress
                 if end_row == self.board_size-1:  # King promotion
-                    reward += 15
+                    reward += 20  # Big reward for getting a king
             else:  # White moving up
-                reward += 0.5 * (start_row - end_row)  # Reward forward movement
+                reward += 1.0 * (start_row - end_row)
                 if end_row == 0:  # King promotion
-                    reward += 15
-                
-            # Center control reward
+                    reward += 20
+            
+            # Center control reward - important for strategy
             center_squares = [(2,2), (2,3), (3,2), (3,3)]
             if (end_row, end_col) in center_squares:
-                reward += 2
+                reward += 3  # Good reward for controlling center
             
-            # King mobility reward
+            # King mobility reward - encourage active kings
             if abs(piece) == 2:
                 valid_moves = self._get_piece_moves(end_row, end_col, player)
-                reward += 0.2 * len(valid_moves)
+                reward += 0.5 * len(valid_moves)  # Reward mobile kings
             
-            # Win/Loss rewards
+            # Win/Loss rewards - keep high stakes
             winner = self.game_winner(self.board)
             if winner == player:
-                reward += 50
+                reward += 50  # Big reward for winning
                 done = True
             elif winner == -player:
-                reward -= 50
+                reward -= 50  # Big penalty for losing
                 done = True
+            
+            # Defensive bonus - reward protecting back row
+            if player == 1 and start_row == 0 and piece > 0:  # Red defending back
+                reward += 2
+            elif player == -1 and start_row == self.board_size-1 and piece < 0:  # White defending back
+                reward += 2
             
             return self.board, reward, additional_moves, done
             

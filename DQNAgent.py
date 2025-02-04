@@ -2,12 +2,15 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
-from collections import deque
+from collections import deque, namedtuple
 import random
 import torch.multiprocessing as mp
 import torch.nn.functional as F
 
 mp.set_start_method('spawn', force=True)  # Add this at the top of the file
+
+# Define transition tuple for experience replay
+Transition = namedtuple('Transition', ('state', 'action', 'reward', 'next_state', 'done'))
 
 class ParallelDQN(nn.Module):
     def __init__(self, state_size, action_size, hidden_size):
@@ -46,10 +49,12 @@ class PriorityReplayBuffer:
     def push(self, state, action, reward, next_state, done):
         max_priority = np.max(self.priorities) if self.memory else 1.0
         
+        transition = Transition(state, action, reward, next_state, done)
+        
         if len(self.memory) < self.capacity:
-            self.memory.append((state, action, reward, next_state, done))
+            self.memory.append(transition)
         else:
-            self.memory[self.position] = (state, action, reward, next_state, done)
+            self.memory[self.position] = transition
             
         self.priorities[self.position] = max_priority
         self.position = (self.position + 1) % self.capacity
@@ -113,24 +118,22 @@ class DQNAgent:
         
     def create_network(self):
         model = nn.Sequential(
-            nn.Linear(self.state_size, 256),
+            nn.Linear(self.state_size, 128),
+            nn.BatchNorm1d(128),
             nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(256, 512),
+            nn.Linear(128, 256),
+            nn.BatchNorm1d(256),
             nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(512, 256),
-            nn.ReLU(),
-            nn.Dropout(0.1),
             nn.Linear(256, 128),
+            nn.BatchNorm1d(128),
             nn.ReLU(),
             nn.Linear(128, self.action_size)
         )
         
-        # Initialize weights properly
+        # Initialize weights with smaller values
         for layer in model:
             if isinstance(layer, nn.Linear):
-                nn.init.kaiming_normal_(layer.weight)
+                nn.init.xavier_uniform_(layer.weight, gain=0.01)
                 nn.init.constant_(layer.bias, 0)
         
         return model.to(self.device)
@@ -168,14 +171,30 @@ class DQNAgent:
         if len(self.memory) < self.batch_size:
             return
             
-        # Get batch using priority sampling
-        batch, indices = self.memory.sample(self.batch_size)
+        # Sample batch
+        transitions, indices = self.memory.sample(self.batch_size)
+        
+        # Convert batch of transitions to transition of batches
+        batch = Transition(*zip(*transitions))
+        
+        # Convert to tensors
+        state_batch = torch.FloatTensor(np.vstack([s.flatten() for s in batch.state])).to(self.device)
+        action_batch = torch.LongTensor([[self.encode_action(a)] for a in batch.action]).to(self.device)
+        reward_batch = torch.FloatTensor(batch.reward).to(self.device)
+        next_state_batch = torch.FloatTensor(np.vstack([s.flatten() for s in batch.next_state])).to(self.device)
+        done_batch = torch.FloatTensor(batch.done).to(self.device)
+        
+        # Compute Q values
+        current_q_values = self.q_network(state_batch).gather(1, action_batch)
+        
+        with torch.no_grad():
+            next_q_values = self.target_network(next_state_batch).max(1)[0]
+            target_q_values = reward_batch + (1 - done_batch) * self.gamma * next_q_values
         
         # Compute loss
-        self.q_network.train()
-        loss = self._compute_loss(batch)
+        loss = F.smooth_l1_loss(current_q_values, target_q_values.unsqueeze(1))
         
-        # Update network
+        # Optimize
         self.optimizer.zero_grad()
         loss.backward()
         torch.nn.utils.clip_grad_norm_(self.q_network.parameters(), 1.0)
@@ -183,23 +202,9 @@ class DQNAgent:
         
         # Update priorities
         with torch.no_grad():
-            td_errors = self._compute_td_errors(batch)
+            td_errors = torch.abs(target_q_values - current_q_values.squeeze())
         self.memory.update_priorities(indices, td_errors.cpu().numpy())
 
-    def _compute_td_errors(self, batch):
-        """Compute TD errors for prioritized replay"""
-        states = torch.FloatTensor(np.vstack([s.flatten() for s, _, _, _, _ in batch])).to(self.device)
-        next_states = torch.FloatTensor(np.vstack([ns.flatten() for _, _, _, ns, _ in batch])).to(self.device)
-        actions = torch.LongTensor([[self.encode_action(a)] for _, a, _, _, _ in batch]).to(self.device)
-        rewards = torch.FloatTensor([r for _, _, r, _, _ in batch]).to(self.device)
-        dones = torch.FloatTensor([d for _, _, _, _, d in batch]).to(self.device)
-        
-        current_q_values = self.q_network(states).gather(1, actions).squeeze()
-        next_q_values = self.target_network(next_states).max(1)[0]
-        target_q_values = rewards + (1 - dones) * self.gamma * next_q_values
-        
-        return torch.abs(target_q_values - current_q_values)
-        
     def update_target_network(self):
         self.target_network.load_state_dict(self.q_network.state_dict())
         

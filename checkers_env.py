@@ -123,40 +123,38 @@ class checkers_env:
             self.board[start_row][start_col] = 0
             self.board[end_row][end_col] = piece
             
-            # Capture reward (about 1/10 of win reward)
+            # Base reward for making a move
+            reward += 0.1
+            
+            # Capture reward
             if abs(start_row - end_row) == 2:
                 mid_row = (start_row + end_row) // 2
                 mid_col = (start_col + end_col) // 2
                 captured_piece = self.board[mid_row][mid_col]
                 self.board[mid_row][mid_col] = 0
-                reward += 10 if abs(captured_piece) == 2 else 8  # King capture worth slightly more
+                reward += 5  # Fixed capture reward
                 
                 additional_moves = [move for move in self.valid_moves(player) 
                                   if move[0] == end_row and move[1] == end_col and abs(move[2] - move[0]) == 2]
             
-            # King promotion (about 1/8 of win reward)
+            # King promotion
             if (player == 1 and end_row == self.board_size-1) or (player == -1 and end_row == 0):
-                reward += 12
+                reward += 3
                 self.board[end_row][end_col] = 2 * player
             
-            # Small strategic rewards (minimal compared to win)
-            # Forward movement
-            if player == 1:
-                reward += 0.5 * (end_row - start_row)
-            else:
-                reward += 0.5 * (start_row - end_row)
+            # Forward movement (small reward)
+            if player == 1:  # Moving down
+                reward += 0.2 * (end_row - start_row)
+            else:  # Moving up
+                reward += 0.2 * (start_row - end_row)
             
-            # Center control (very small bonus)
-            if (end_row, end_col) in [(2,2), (2,3), (3,2), (3,3)]:
-                reward += 1
-            
-            # Win/Loss rewards (dominant factor)
+            # Win/Loss rewards
             winner = self.game_winner(self.board)
             if winner == player:
-                reward += 100  # Winning is the primary goal
+                reward += 10  # Reduced win reward
                 done = True
             elif winner == -player:
-                reward -= 100  # Losing is the worst outcome
+                reward -= 10  # Reduced loss penalty
                 done = True
             
             return self.board, reward, additional_moves, done

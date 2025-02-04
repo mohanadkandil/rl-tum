@@ -10,15 +10,16 @@ import math
 
 # Training parameters
 EPISODES = 5000
-EVAL_FREQUENCY = 25
-EVAL_EPISODES = 100  # More evaluation games for stability
-BATCH_SIZE = 128  # Larger batch size
-TARGET_UPDATE = 10  # Update target network more frequently
-MEMORY_SIZE = 100000
-LEARNING_RATE = 0.0001  # Lower learning rate for stability
+EVAL_FREQUENCY = 50  # Less frequent evaluation
+EVAL_EPISODES = 50  # Fewer evaluation games
+BATCH_SIZE = 64  # Smaller batch size
+TARGET_UPDATE = 100  # Update target network less frequently
+MEMORY_SIZE = 50000  # Smaller memory
+LEARNING_RATE = 0.001  # Higher learning rate
+GAMMA = 0.95  # Discount factor
 EPSILON_START = 1.0
 EPSILON_END = 0.1
-EPSILON_DECAY = 0.999  # Slower decay
+EPSILON_DECAY = 0.995  # Slower decay
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train Checkers AI')
@@ -349,13 +350,13 @@ def train_agent():
         env = checkers_env()
         agent = DQNAgent()
         
-        # Modified curriculum - slower progression
-        phase_ratio = episodes / 5000
+        # Simpler curriculum
         curriculum_phases = [
-            (0, "random", 0.3),  # Start with lower target
-            (int(2000 * phase_ratio), "random", 0.5),  # Stay on random longer
-            (int(3000 * phase_ratio), "basic", 0.4),
-            (int(4000 * phase_ratio), "medium", 0.3)
+            (0, "random", 0.4),        # Phase 1: Beat random
+            (1000, "random", 0.5),     # Phase 2: Improve vs random
+            (2000, "basic", 0.4),      # Phase 3: Start vs basic
+            (3000, "basic", 0.5),      # Phase 4: Improve vs basic
+            (4000, "medium", 0.3)      # Phase 5: Start vs medium
         ]
         
         print(f"Starting training for {episodes} episodes...")

@@ -134,25 +134,104 @@ def select_random_move(env, valid_moves):
     return random.choice(valid_moves)
 
 def select_basic_move(env, valid_moves):
-    """Basic opponent - only prefers captures"""
-    captures = [m for m in valid_moves if abs(m[0] - m[2]) == 2]
-    return random.choice(captures) if captures else random.choice(valid_moves)
+    """Basic strategy: Prefer captures, then forward moves"""
+    # First priority: captures
+    capture_moves = [move for move in valid_moves if abs(move[0] - move[2]) == 2]
+    if capture_moves:
+        return random.choice(capture_moves)
+    
+    # Second priority: forward moves
+    player = env.player
+    forward_moves = []
+    for move in valid_moves:
+        if (player == 1 and move[2] > move[0]) or (player == -1 and move[2] < move[0]):
+            forward_moves.append(move)
+    
+    if forward_moves:
+        return random.choice(forward_moves)
+    
+    # Fallback: random move
+    return random.choice(valid_moves)
 
-def select_advanced_move(env, valid_moves):
-    """Advanced opponent - uses position evaluation"""
+def select_medium_move(env, valid_moves):
+    """Medium strategy: Balance between captures and position"""
+    best_score = float('-inf')
+    best_moves = []
+    
+    for move in valid_moves:
+        score = 0
+        start_row, start_col, end_row, end_col = move
+        
+        # Evaluate captures but don't overvalue them
+        if abs(start_row - end_row) == 2:
+            score += 30
+            mid_row = (start_row + end_row) // 2
+            mid_col = (start_col + end_col) // 2
+            captured_piece = abs(env.board[mid_row][mid_col])
+            score += 20 if captured_piece == 2 else 10
+        
+        # Value center control
+        if 1 <= end_row <= 4 and 1 <= end_col <= 4:
+            score += 10
+        
+        # Consider king moves and promotions
+        piece = abs(env.board[start_row][start_col])
+        if piece == 2:
+            score += 15
+        elif ((env.player == 1 and end_row == env.board_size-1) or 
+              (env.player == -1 and end_row == 0)):
+            score += 25
+        
+        # Back row defense bonus
+        if (env.player == 1 and start_row == 0) or (env.player == -1 and start_row == env.board_size-1):
+            score -= 15  # Penalty for moving from back row
+        
+        if score > best_score:
+            best_score = score
+            best_moves = [move]
+        elif score == best_score:
+            best_moves.append(move)
+    
+    return random.choice(best_moves)
+
+def select_advanced_move(env, valid_moves, depth=2):
+    """Advanced strategy: Use minimax with better evaluation"""
+    def minimax(board, depth, alpha, beta, maximizing):
+        if depth == 0:
+            return evaluate_position(board, env.player)
+            
+        if maximizing:
+            max_eval = float('-inf')
+            for move in env.valid_moves(env.player):
+                temp_board = board.copy()
+                env.make_move(move)
+                eval = minimax(env.board, depth-1, alpha, beta, False)
+                env.board = temp_board
+                max_eval = max(max_eval, eval)
+                alpha = max(alpha, eval)
+                if beta <= alpha:
+                    break
+            return max_eval
+        else:
+            min_eval = float('inf')
+            for move in env.valid_moves(-env.player):
+                temp_board = board.copy()
+                env.make_move(move)
+                eval = minimax(env.board, depth-1, alpha, beta, True)
+                env.board = temp_board
+                min_eval = min(min_eval, eval)
+                beta = min(beta, eval)
+                if beta <= alpha:
+                    break
+            return min_eval
+    
     best_score = float('-inf')
     best_move = valid_moves[0]
     
     for move in valid_moves:
-        # Make temporary move
         temp_board = env.board.copy()
-        env.board[move[2]][move[3]] = env.board[move[0]][move[1]]
-        env.board[move[0]][move[1]] = 0
-        
-        # Evaluate position
-        score = evaluate_position(env.board, env.player)
-        
-        # Restore board
+        env.make_move(move)
+        score = minimax(env.board, depth-1, float('-inf'), float('inf'), False)
         env.board = temp_board
         
         if score > best_score:
@@ -371,7 +450,7 @@ def evaluate_with_different_opponents(agent, env):
     opponents = {
         'random': select_random_move,
         'basic': select_basic_move,
-        'medium': select_strategic_move,
+        'medium': select_medium_move,
         'advanced': select_advanced_move
     }
     

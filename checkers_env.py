@@ -123,52 +123,41 @@ class checkers_env:
             self.board[start_row][start_col] = 0
             self.board[end_row][end_col] = piece
             
-            # Capture reward - keep high to encourage aggressive play
+            # Capture reward (about 1/10 of win reward)
             if abs(start_row - end_row) == 2:
                 mid_row = (start_row + end_row) // 2
                 mid_col = (start_col + end_col) // 2
                 captured_piece = self.board[mid_row][mid_col]
                 self.board[mid_row][mid_col] = 0
-                reward += 15 if abs(captured_piece) == 2 else 10  # High reward for captures
+                reward += 10 if abs(captured_piece) == 2 else 8  # King capture worth slightly more
                 
-                # Check for additional captures
                 additional_moves = [move for move in self.valid_moves(player) 
                                   if move[0] == end_row and move[1] == end_col and abs(move[2] - move[0]) == 2]
             
-            # Strategic position rewards - encourage forward movement
-            if player == 1:  # Red moving down
-                reward += 1.0 * (end_row - start_row)  # Significant reward for forward progress
-                if end_row == self.board_size-1:  # King promotion
-                    reward += 20  # Big reward for getting a king
-            else:  # White moving up
-                reward += 1.0 * (start_row - end_row)
-                if end_row == 0:  # King promotion
-                    reward += 20
+            # King promotion (about 1/8 of win reward)
+            if (player == 1 and end_row == self.board_size-1) or (player == -1 and end_row == 0):
+                reward += 12
+                self.board[end_row][end_col] = 2 * player
             
-            # Center control reward - important for strategy
-            center_squares = [(2,2), (2,3), (3,2), (3,3)]
-            if (end_row, end_col) in center_squares:
-                reward += 3  # Good reward for controlling center
+            # Small strategic rewards (minimal compared to win)
+            # Forward movement
+            if player == 1:
+                reward += 0.5 * (end_row - start_row)
+            else:
+                reward += 0.5 * (start_row - end_row)
             
-            # King mobility reward - encourage active kings
-            if abs(piece) == 2:
-                valid_moves = self._get_piece_moves(end_row, end_col, player)
-                reward += 0.5 * len(valid_moves)  # Reward mobile kings
+            # Center control (very small bonus)
+            if (end_row, end_col) in [(2,2), (2,3), (3,2), (3,3)]:
+                reward += 1
             
-            # Win/Loss rewards - keep high stakes
+            # Win/Loss rewards (dominant factor)
             winner = self.game_winner(self.board)
             if winner == player:
-                reward += 50  # Big reward for winning
+                reward += 100  # Winning is the primary goal
                 done = True
             elif winner == -player:
-                reward -= 50  # Big penalty for losing
+                reward -= 100  # Losing is the worst outcome
                 done = True
-            
-            # Defensive bonus - reward protecting back row
-            if player == 1 and start_row == 0 and piece > 0:  # Red defending back
-                reward += 2
-            elif player == -1 and start_row == self.board_size-1 and piece < 0:  # White defending back
-                reward += 2
             
             return self.board, reward, additional_moves, done
             
@@ -209,3 +198,54 @@ class checkers_env:
                     print("W", end=" ")
             print()
         print()
+
+    def is_protected(self, row, col, player):
+        """Check if a piece is protected by friendly pieces"""
+        # A piece is protected if:
+        # 1. It's in the back row
+        # 2. It has friendly pieces diagonally behind it
+        # 3. It's adjacent to a friendly piece
+        
+        # Back row protection
+        if (player == 1 and row == 0) or (player == -1 and row == self.board_size-1):
+            return True
+        
+        # Check diagonally behind the piece
+        if player == 1:  # Red pieces (moving down)
+            protect_rows = [row-1] if row > 0 else []
+        else:  # White pieces (moving up)
+            protect_rows = [row+1] if row < self.board_size-1 else []
+        
+        for r in protect_rows:
+            for c in [col-1, col+1]:
+                if 0 <= c < self.board_size:
+                    if self.board[r][c] * player > 0:  # Friendly piece
+                        return True
+                    
+        # Check adjacent squares for friendly pieces
+        for dr, dc in [(-1,-1), (-1,1), (1,-1), (1,1)]:
+            r, c = row + dr, col + dc
+            if 0 <= r < self.board_size and 0 <= c < self.board_size:
+                if self.board[r][c] * player > 0:  # Friendly piece
+                    return True
+                
+        return False
+
+    def make_move(self, move):
+        """Execute a move without calculating rewards - used for opponent simulation"""
+        start_row, start_col, end_row, end_col = move
+        piece = self.board[start_row][start_col]
+        
+        # Make the move
+        self.board[start_row][start_col] = 0
+        self.board[end_row][end_col] = piece
+        
+        # Handle capture
+        if abs(start_row - end_row) == 2:
+            mid_row = (start_row + end_row) // 2
+            mid_col = (start_col + end_col) // 2
+            self.board[mid_row][mid_col] = 0
+        
+        # Handle king promotion
+        if (piece == 1 and end_row == self.board_size-1) or (piece == -1 and end_row == 0):
+            self.board[end_row][end_col] = 2 * piece

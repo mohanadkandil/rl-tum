@@ -129,30 +129,39 @@ class checkers_env:
                 mid_col = (start_col + end_col) // 2
                 captured_piece = self.board[mid_row][mid_col]
                 self.board[mid_row][mid_col] = 0
-                reward += 5 if abs(captured_piece) == 2 else 2
+                reward += 10 if abs(captured_piece) == 2 else 5  # Higher reward for capturing kings
                 
                 # Check for additional captures
                 additional_moves = [move for move in self.valid_moves(player) 
                                   if move[0] == end_row and move[1] == end_col and abs(move[2] - move[0]) == 2]
             
-            # King promotion
-            if (player == 1 and end_row == self.board_size-1) or (player == -1 and end_row == 0):
-                self.board[end_row][end_col] = 2 * player
-                reward += 3
+            # Strategic position rewards
+            if player == 1:  # Red moving down
+                reward += 0.5 * (end_row - start_row)  # Reward forward movement
+                if end_row == self.board_size-1:  # King promotion
+                    reward += 15
+            else:  # White moving up
+                reward += 0.5 * (start_row - end_row)  # Reward forward movement
+                if end_row == 0:  # King promotion
+                    reward += 15
+                
+            # Center control reward
+            center_squares = [(2,2), (2,3), (3,2), (3,3)]
+            if (end_row, end_col) in center_squares:
+                reward += 2
             
-            # Position rewards
-            if player == 1:
-                reward += 0.1 * (end_row - start_row)
-            else:
-                reward += 0.1 * (start_row - end_row)
+            # King mobility reward
+            if abs(piece) == 2:
+                valid_moves = self._get_piece_moves(end_row, end_col, player)
+                reward += 0.2 * len(valid_moves)
             
-            # Check win conditions
+            # Win/Loss rewards
             winner = self.game_winner(self.board)
             if winner == player:
-                reward += 10
+                reward += 50
                 done = True
             elif winner == -player:
-                reward -= 10
+                reward -= 50
                 done = True
             
             return self.board, reward, additional_moves, done

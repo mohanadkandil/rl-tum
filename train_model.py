@@ -140,7 +140,7 @@ def train_agent(episodes=None):
             next_state, reward, _, done = env.step(action, env.player)  # Ignore additional_moves for random opponent
             moves_made += 1
             agent.remember(state, action, reward, next_state, done)
-            agent.replay()
+
 
             
             if done:

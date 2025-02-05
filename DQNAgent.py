@@ -12,25 +12,23 @@ mp.set_start_method('spawn', force=True)  # Add this at the top of the file
 class ParallelDQN(nn.Module):
     def __init__(self, state_size, action_size, hidden_size):
         super(ParallelDQN, self).__init__()
-        self.network = nn.Sequential(
-            nn.Linear(state_size, hidden_size),
-            nn.ReLU(),
-            nn.Dropout(0.2),  # Add dropout to prevent overfitting
-            nn.Linear(hidden_size, hidden_size * 2),  # Wider network
-            nn.ReLU(),
-            nn.Dropout(0.2),
-            nn.Linear(hidden_size * 2, hidden_size),  # Bottleneck
-            nn.ReLU(),
-            nn.Linear(hidden_size, action_size)
-        )
+        self.fc1=nn.Linear(state_size, hidden_size)
+
+        self.fc2=nn.Dropout(0.2)  # Add dropout to prevent overfitting
+        self.fc3=nn.Linear(hidden_size, hidden_size * 2)  # Wider network
+        self.fc4=nn.Dropout(0.2)
+        self.fc5=nn.Linear(hidden_size * 2, hidden_size)  # Bottleneck
+        self.fc6=nn.Linear(hidden_size, action_size)
+
         
         # Enable parallel processing
-        if torch.cuda.device_count() > 1:
-            print(f"Using {torch.cuda.device_count()} GPUs!")
-            self.network = nn.DataParallel(self.network)
+
 
     def forward(self, x):
-        return self.network(x)
+        x=torch.relu(self.fc1(x))
+        x=torch.relu(self.fc3(x))
+        x=torch.relu(self.fc5(x))
+        return self.fc6(x)
 
 class PriorityReplayBuffer:
     def __init__(self, capacity, alpha):

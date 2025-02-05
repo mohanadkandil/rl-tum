@@ -54,7 +54,7 @@ def evaluate_agent(agent, env):
                 if env.game_winner(next_state) == -1:  # AI won
                     wins += 1
                 break
-                
+            state = next_state
             # Random opponent move
             env.player = 1
             valid_moves = env.valid_moves(env.player)
@@ -63,7 +63,7 @@ def evaluate_agent(agent, env):
                 wins += 1  # AI won if opponent has no moves
                 break
                 
-            action = random.choice(valid_moves)
+            action = agent.act(state,valid_moves)
             next_state, reward, _, done = env.step(action, env.player)
             moves_made += 1
             
@@ -126,7 +126,7 @@ def train_agent(episodes=None):
                 agent.replay()
                 if agent.epsilon > agent.epsilon_min:
                     agent.epsilon = max(agent.epsilon_min, agent.epsilon * agent.epsilon_decay)
-            
+            state = next_state
             if done:
                 break
                 
@@ -136,9 +136,12 @@ def train_agent(episodes=None):
             if not valid_moves:
                 break
                 
-            action = random.choice(valid_moves)
+            action = agent.act(state,valid_moves)
             next_state, reward, _, done = env.step(action, env.player)  # Ignore additional_moves for random opponent
             moves_made += 1
+            agent.remember(state, action, reward, next_state, done)
+            agent.replay()
+
             
             if done:
                 break
@@ -151,6 +154,8 @@ def train_agent(episodes=None):
                 agent.update_target_network()
         
         rewards.append(episode_reward)
+        agent.update_target_network()
+
         
         # Evaluate periodically
         if episode % eval_frequency == 0:

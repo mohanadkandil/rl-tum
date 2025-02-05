@@ -83,9 +83,17 @@ class CheckersTrainer:
 
                     # Encourage positional play
                     if player == 1:
-                        reward += 0.1 * (action[2] - action[0])
+                        reward += 0.1 * (action[2] - action[0])  # Forward movement bonus
                     else:
                         reward += 0.1 * (action[0] - action[2])
+
+                    # Capture Bonus
+                    if abs(action[2] - action[0]) == 2:  # A jump move
+                        reward += 2.0  # Encourage captures
+
+                    # King Promotion Bonus
+                    if (player == 1 and action[2] == self.env.board_size - 1) or (player == -1 and action[2] == 0):
+                        reward += 3.0  # High reward for king promotion
 
                     current_agent.remember(state, action, reward, next_state, done)
 
@@ -113,7 +121,7 @@ class CheckersTrainer:
 
                 if (episode + 1) % self.eval_frequency == 0:
                     self.evaluate()
-                    win_rate = (wins[1] / max(1, (episode + 1))) * 100
+                    win_rate = (wins[1] / max(1, sum(wins.values()))) * 100
                     self.win_rates.append(win_rate)
                     plot = self.live_plot_terminal()
                     live.update(Panel(plot, title="Win Rate"))

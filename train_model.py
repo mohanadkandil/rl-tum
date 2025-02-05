@@ -51,7 +51,8 @@ class CheckersTrainer:
                 next_state, reward, additional_moves, done = self.env.step(action, player)
 
                 current_agent.remember(state, action, reward, next_state, done)
-                current_agent.replay()
+                if len(current_agent.memory) >= current_agent.batch_size:
+                    current_agent.replay()
 
                 state = next_state
                 total_reward += reward
@@ -68,7 +69,7 @@ class CheckersTrainer:
             wins[winner] += 1
 
             if (episode + 1) % self.eval_frequency == 0:
-                win_rate = (wins[1] / (episode + 1)) * 100
+                win_rate = (wins[1] / max(1, (episode + 1))) * 100
                 self.win_rates.append(win_rate)
                 print(f"Episode {episode + 1}: Win rate {win_rate:.2f}%")
 
@@ -100,7 +101,7 @@ class CheckersTrainer:
 
         print(f"Evaluation Results: Agent 1 Wins: {wins[1]}, Agent 2 Wins: {wins[-1]}, Draws: {wins[0]}")
 
-    def plot_training_results(self):
+    def plot_training_results(self, save_path="training_results.png"):
         plt.figure(figsize=(10, 5))
         plt.subplot(1, 2, 1)
         plt.plot(self.rewards, label='Rewards per Episode')
@@ -117,7 +118,25 @@ class CheckersTrainer:
         plt.title('Win Rate Progression')
         plt.legend()
 
+        plt.savefig(save_path)
         plt.show()
+
+    def save_model(self, path="checkers_agent.pth"):
+        torch.save({
+            'agent1_state_dict': self.agent1.q_network.state_dict(),
+            'agent2_state_dict': self.agent2.q_network.state_dict()
+        }, path)
+        print(f"Model saved to {path}")
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description='Train Checkers AI')
+    parser.add_argument('--episodes', type=int, default=200,
+                        help='Number of episodes to train (default: 200)')
+    parser.add_argument('--eval-frequency', type=int, default=100,
+                        help='How often to evaluate the agent (default: 100)')
+    return parser.parse_args()
+
 
 def train_agent(episodes=None):
     env = checkers_env()

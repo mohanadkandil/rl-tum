@@ -60,10 +60,8 @@ class CheckersTrainer:
     def train(self):
         wins = {1: 0, -1: 0, 0: 0}
         checkpoint_dir = 'checkpoints'
-        if not os.path.exists(checkpoint_dir):
-            os.makedirs(checkpoint_dir)
+        os.makedirs(checkpoint_dir, exist_ok=True)
 
-        best_model_path = os.path.join(checkpoint_dir, 'best_model.pth')
         console = Console()
         with Live(console=console, refresh_per_second=2) as live:
             for episode in range(self.episodes):
@@ -71,6 +69,7 @@ class CheckersTrainer:
                 done = False
                 current_agent = self.agent1 if random.random() < 0.5 else self.agent2
                 opponent_agent = self.agent2 if current_agent == self.agent1 else self.agent1
+                opponent_agent.epsilon = max(0.01, 0.3 - (episode / self.episodes) * 0.25)
                 player = 1 if current_agent == self.agent1 else -1
                 total_reward = 0
 
@@ -82,16 +81,9 @@ class CheckersTrainer:
                     action = current_agent.act(state, valid_moves)
                     next_state, reward, additional_moves, done = self.env.step(action, player)
 
-                    if player == 1:
-                        reward += 0.2 * (action[2] - action[0])
-                    else:
-                        reward += 0.2 * (action[0] - action[2])
-
-                    if abs(action[2] - action[0]) == 2:
-                        reward += 3.0
-
-                    if (player == 1 and action[2] == self.env.board_size - 1) or (player == -1 and action[2] == 0):
-                        reward += 5.0
+                    reward += 0.2 * (action[2] - action[0]) if player == 1 else 0.2 * (action[0] - action[2])
+                    reward += 3.0 if abs(action[2] - action[0]) == 2 else 0.0
+                    reward += 5.0 if (player == 1 and action[2] == self.env.board_size - 1) or (player == -1 and action[2] == 0) else 0.0
 
                     current_agent.remember(state, action, reward, next_state, done)
 
@@ -110,39 +102,18 @@ class CheckersTrainer:
 
                 if episode % 5 == 0:
                     self.agent1.update_target_network()
-                    self.agent1.optimizer.param_groups[0]['lr'] = self.args.learning_rate
                     self.agent2.update_target_network()
-                    self.agent2.optimizer.param_groups[0]['lr'] = self.args.learning_rate
 
                 self.rewards.append(total_reward)
-
                 winner = self.env.game_winner(state)
                 wins[winner] += 1
 
                 if (episode + 1) % self.eval_frequency == 0:
-                    if wins[1] > wins[-1]:
-                        self.agent2.epsilon = min(1.0, self.agent2.epsilon * 1.2)
-                    elif wins[-1] > wins[1]:
-                        self.agent1.epsilon = min(1.0, self.agent1.epsilon * 1.2)
-
-                    if wins[1] > 0.6 * sum(wins.values()):
-                        for _ in range(7):
-                            self.agent2.replay()
-                    elif wins[-1] > 0.6 * sum(wins.values()):
-                        for _ in range(7):
-                            self.agent1.replay()
                     eval_wins = self.evaluate()
-                    win_rate = (eval_wins[1] / max(1, (eval_wins[1] + eval_wins[-1] + eval_wins[0]))) * 100
-                    self.win_rates.append(win_rate)
-                    if win_rate < 50:
-                        self.agent1.epsilon = min(1.0, self.agent1.epsilon * 1.15)
-                        self.agent2.epsilon = min(1.0, self.agent2.epsilon * 1.15)
-                        for _ in range(10):
-                            self.agent1.replay()
-                            self.agent2.replay()
-                    plot = self.live_plot_terminal()
-                    live.update(Panel(plot, title="Win Rate"))
-                    print(f"Episode {episode + 1}: Win rate {win_rate:.2f}%")
+                    if eval_wins:
+                        win_rate = (eval_wins[1] / max(1, (eval_wins[1] + eval_wins[-1] + eval_wins[0]))) * 100
+                        self.win_rates.append(win_rate)
+                        print(f"Episode {episode + 1}: Win rate {win_rate:.2f}%")
 
         self.save_model(os.path.join(checkpoint_dir, f'model_final_e{self.episodes}.pth'))
         plot_path = os.path.join(checkpoint_dir, 'training_results.png')
@@ -152,41 +123,29 @@ class CheckersTrainer:
 
     def evaluate(self):
         wins = {1: 0, -1: 0, 0: 0}
-
         for _ in range(self.eval_games):
             state = self.env.reset()
             done = False
             player = 1
-
             while not done:
                 agent = self.agent1 if player == 1 else self.agent2
                 valid_moves = self.env.valid_moves(player)
-
                 if not valid_moves:
                     opponent_moves = self.env.valid_moves(-player)
-                    if not opponent_moves:  # Both players have no valid moves -> Draw
+                    if not opponent_moves or (len(self.env.valid_moves(1)) == 0 and len(self.env.valid_moves(-1)) == 0):
                         wins[0] += 1
                         break
-                    else:
-                        player *= -1
-                        continue  # Switch turn
-
+                    player *= -1
+                    continue
                 action = agent.act(state, valid_moves)
                 state, _, additional_moves, done = self.env.step(action, player)
-
                 if not additional_moves:
                     player *= -1
-
             winner = self.env.game_winner(state)
+            wins[winner] += 1
+        return wins
 
-            if winner == 0:
-                wins[0] += 1
-            else:
-                wins[winner] += 1
 
-        print(f"Evaluation Results: Agent 1 Wins: {wins[1]}, Agent 2 Wins: {wins[-1]}, Draws: {wins[0]}")
-
-        return wins  # Return evaluation results
 
     def live_plot_terminal(self):
         """Creates a live-updating plot using plotext."""

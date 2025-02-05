@@ -117,11 +117,30 @@ class CheckersTrainer:
                 self.rewards.append(total_reward)
 
                 winner = self.env.game_winner(state)
+
+                # Adaptive reward adjustment based on opponent strength
+                if winner == 1 and wins[-1] > wins[1]:  # Agent 1 wins against a stronger Agent 2
+                    total_reward += 5  # Higher reward
+                elif winner == -1 and wins[1] > wins[-1]:  # Agent 2 wins against a stronger Agent 1
+                    total_reward += 5
                 wins[winner] += 1
 
                 if (episode + 1) % self.eval_frequency == 0:
+                    # Adjust weaker agent's exploration
+                    if wins[1] > wins[-1]:  # Agent 1 is stronger
+                        self.agent2.epsilon = min(1.0, self.agent2.epsilon * 1.05)  # Encourage more exploration
+                    elif wins[-1] > wins[1]:  # Agent 2 is stronger
+                        self.agent1.epsilon = min(1.0, self.agent1.epsilon * 1.05)
+
+                    # Adjust training for weaker agent
+                    if wins[1] > 0.65 * sum(wins.values()):
+                        for _ in range(3):
+                            self.agent2.replay()
+                    elif wins[-1] > 0.65 * sum(wins.values()):
+                        for _ in range(3):
+                            self.agent1.replay()
                     self.evaluate()
-                    win_rate = (wins[1] / max(1, sum(wins.values()))) * 100
+                    win_rate = ((wins[1] - wins[-1]) / max(1, (wins[1] + wins[-1] + wins[0]))) * 100
                     self.win_rates.append(win_rate)
                     plot = self.live_plot_terminal()
                     live.update(Panel(plot, title="Win Rate"))
@@ -161,7 +180,12 @@ class CheckersTrainer:
                     player *= -1
 
             winner = self.env.game_winner(state)
-            wins[winner] += 1
+
+            # Ensure stalemates are counted as draws
+            if winner == 0:
+                wins[0] += 1
+            else:
+                wins[winner] += 1
 
         print(f"Evaluation Results: Agent 1 Wins: {wins[1]}, Agent 2 Wins: {wins[-1]}, Draws: {wins[0]}")
 

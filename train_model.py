@@ -51,8 +51,12 @@ class CheckersTrainer:
                 next_state, reward, additional_moves, done = self.env.step(action, player)
 
                 current_agent.remember(state, action, reward, next_state, done)
-                if len(current_agent.memory) >= current_agent.batch_size:
+
+                if len(current_agent.memory) > current_agent.batch_size:
                     current_agent.replay()
+                    if current_agent.epsilon > current_agent.epsilon_min:
+                        current_agent.epsilon = max(current_agent.epsilon_min, current_agent.epsilon * current_agent.epsilon_decay)
+
 
                 state = next_state
                 total_reward += reward
@@ -136,7 +140,6 @@ def parse_args():
     parser.add_argument('--eval-frequency', type=int, default=100,
                         help='How often to evaluate the agent (default: 100)')
     return parser.parse_args()
-
 
 def train_agent(episodes=None):
     env = checkers_env()

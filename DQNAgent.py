@@ -9,26 +9,32 @@ import torch.nn.functional as F
 
 mp.set_start_method('spawn', force=True)  # Add this at the top of the file
 
+
 class ParallelDQN(nn.Module):
-    def __init__(self, state_size, action_size, hidden_size):
+    def __init__(self, state_size, action_size, hidden_size=512):
         super(ParallelDQN, self).__init__()
-        self.fc1=nn.Linear(state_size, hidden_size)
 
-        self.fc2=nn.Dropout(0.2)  # Add dropout to prevent overfitting
-        self.fc3=nn.Linear(hidden_size, hidden_size * 2)  # Wider network
-        self.fc4=nn.Dropout(0.2)
-        self.fc5=nn.Linear(hidden_size * 2, hidden_size)  # Bottleneck
-        self.fc6=nn.Linear(hidden_size, action_size)
+        self.fc1 = nn.Linear(state_size, hidden_size)
+        self.bn1 = nn.BatchNorm1d(hidden_size)
+        self.fc2 = nn.Linear(hidden_size, hidden_size * 2)
+        self.bn2 = nn.BatchNorm1d(hidden_size * 2)
+        self.fc3 = nn.Linear(hidden_size * 2, hidden_size)
+        self.bn3 = nn.BatchNorm1d(hidden_size)
+        self.fc4 = nn.Linear(hidden_size, action_size)
 
-        
-        # Enable parallel processing
+        self.dropout = nn.Dropout(0.2)
 
+        # Enable parallel processing for multiple GPUs if available
+        if torch.cuda.device_count() > 1:
+            self = nn.DataParallel(self)
 
     def forward(self, x):
-        x=torch.relu(self.fc1(x))
-        x=torch.relu(self.fc3(x))
-        x=torch.relu(self.fc5(x))
-        return self.fc6(x)
+        x = F.leaky_relu(self.bn1(self.fc1(x)))
+        x = self.dropout(x)
+        x = F.leaky_relu(self.bn2(self.fc2(x)))
+        x = self.dropout(x)
+        x = F.leaky_relu(self.bn3(self.fc3(x)))
+        return self.fc4(x)
 
 class PriorityReplayBuffer:
     def __init__(self, capacity, alpha):
@@ -53,27 +59,27 @@ class PriorityReplayBuffer:
         
         self.priorities[self.position] = max_priority
         self.position = (self.position + 1) % self.capacity
-        
+
     def sample(self, batch_size, beta):
         if len(self.memory) == 0:
             return [], [], []
-            
-        # Calculate sampling probabilities
-        priorities = self.priorities[:len(self.memory)]
+
+        # Calculate sampling probabilities safely
+        priorities = self.priorities[:len(self.memory)] + self.priority_epsilon
         probs = priorities ** self.alpha
-        probs /= probs.sum()
-        
+        probs /= probs.sum() if probs.sum() > 0 else np.ones_like(probs)  # Prevent NaN
+
         # Sample indices based on priorities
         indices = np.random.choice(len(self.memory), batch_size, p=probs)
-        
+
         # Calculate importance sampling weights
         total = len(self.memory)
         weights = (total * probs[indices]) ** (-beta)
-        weights /= weights.max()
-        
+        weights /= weights.max() if weights.max() > 0 else 1  # Prevent NaN
+
         samples = [self.memory[idx] for idx in indices]
         return samples, indices, weights
-        
+
     def update_priorities(self, indices, td_errors):
         for idx, error in zip(indices, td_errors):
             self.priorities[idx] = abs(error) + self.priority_epsilon
@@ -98,7 +104,7 @@ class DQNAgent:
         self.epsilon_decay = 0.9995  # More gradual decay (was 0.995)
         self.learning_rate = 0.0001
         self.batch_size = 128  # Increased batch size for H100
-        
+        self.hidden_size = hidden_size=512
         # H100 specific optimizations
         if torch.cuda.is_available():
             torch.cuda.set_device(0)
@@ -144,8 +150,8 @@ class DQNAgent:
             return model
         
         # Create networks and ensure they're on GPU
-        self.q_network = create_network()
-        self.target_network = create_network()
+        self.q_network = ParallelDQN(state_size, action_size, hidden_size).to(self.device)
+        self.target_network = ParallelDQN(state_size, action_size, hidden_size).to(self.device)
         
         # Use mixed precision training only if CUDA is available
         self.scaler = torch.amp.GradScaler('cuda') if torch.cuda.is_available() else None

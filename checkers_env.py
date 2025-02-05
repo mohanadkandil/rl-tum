@@ -149,10 +149,10 @@ class checkers_env:
             # Check win conditions
             winner = self.game_winner(self.board)
             if winner == player:
-                reward += 10
+                reward += 100
                 done = True
             elif winner == -player:
-                reward -= 10
+                reward -= 100
                 done = True
             
             return self.board, reward, additional_moves, done

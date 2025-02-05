@@ -117,30 +117,24 @@ class CheckersTrainer:
                 self.rewards.append(total_reward)
 
                 winner = self.env.game_winner(state)
-
-                # Adaptive reward adjustment based on opponent strength
-                if winner == 1 and wins[-1] > wins[1]:  # Agent 1 wins against a stronger Agent 2
-                    total_reward += 5  # Higher reward
-                elif winner == -1 and wins[1] > wins[-1]:  # Agent 2 wins against a stronger Agent 1
-                    total_reward += 5
                 wins[winner] += 1
 
                 if (episode + 1) % self.eval_frequency == 0:
                     # Adjust weaker agent's exploration
                     if wins[1] > wins[-1]:  # Agent 1 is stronger
-                        self.agent2.epsilon = min(1.0, self.agent2.epsilon * 1.05)  # Encourage more exploration
+                        self.agent2.epsilon = min(1.0, self.agent2.epsilon * 1.1)
                     elif wins[-1] > wins[1]:  # Agent 2 is stronger
-                        self.agent1.epsilon = min(1.0, self.agent1.epsilon * 1.05)
+                        self.agent1.epsilon = min(1.0, self.agent1.epsilon * 1.1)
 
                     # Adjust training for weaker agent
                     if wins[1] > 0.65 * sum(wins.values()):
-                        for _ in range(3):
+                        for _ in range(5):
                             self.agent2.replay()
                     elif wins[-1] > 0.65 * sum(wins.values()):
-                        for _ in range(3):
+                        for _ in range(5):
                             self.agent1.replay()
                     self.evaluate()
-                    win_rate = ((wins[1] - wins[-1]) / max(1, (wins[1] + wins[-1] + wins[0]))) * 100
+                    win_rate = (wins[1] / max(1, (wins[1] + wins[-1] + wins[0]))) * 100
                     self.win_rates.append(win_rate)
                     plot = self.live_plot_terminal()
                     live.update(Panel(plot, title="Win Rate"))
@@ -151,7 +145,6 @@ class CheckersTrainer:
         self.plot_training_results(plot_path)
 
         return self.agent1, self.agent2, self.rewards, self.win_rates, self.eval_frequency
-
     def evaluate(self):
         wins = {1: 0, -1: 0, 0: 0}
 
@@ -217,10 +210,9 @@ class CheckersTrainer:
         plt.legend()
 
         plt.subplot(1, 2, 2)
-        eval_episodes = range(0, len(self.rewards), self.eval_frequency)
-        if len(eval_episodes) > len(self.win_rates):
-            eval_episodes = eval_episodes[:len(self.win_rates)]
-        plt.plot(eval_episodes, self.win_rates)
+        eval_episodes = list(
+            range(self.eval_frequency, len(self.win_rates) * self.eval_frequency + 1, self.eval_frequency))
+        plt.plot(eval_episodes, self.win_rates, label='Win Rate')
         plt.xlabel('Episodes')
         plt.ylabel('Win Rate (%)')
         plt.title('Win Rate Progression')

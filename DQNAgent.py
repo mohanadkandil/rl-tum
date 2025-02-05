@@ -216,7 +216,7 @@ class DQNAgent:
         
         # Use mixed precision training only if CUDA is available
         if torch.cuda.is_available():
-            with torch.cuda.amp.autocast():
+            with torch.amp.autocast('cuda'):
                 current_q_values = self.q_network(states)
                 with torch.no_grad():
                     next_q_values = self.target_network(next_states)

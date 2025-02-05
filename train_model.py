@@ -1,5 +1,13 @@
+import time
+
 import torch
 import numpy as np
+from rich.live import Live
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.progress import Progress
+
 from checkers_env import checkers_env
 from DQNAgent import DQNAgent
 import matplotlib.pyplot as plt
@@ -26,7 +34,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Train Checkers AI')
     parser.add_argument('--episodes', type=int, default=200,
                         help='Number of episodes to train (default: 200)')
-    parser.add_argument('--eval-frequency', type=int, default=100,
+    parser.add_argument('--eval-frequency', type=int, default=10,
                         help='How often to evaluate the agent (default: 100)')
     parser.add_argument('--learning-rate', type=float, default=0.0001,
                         help='Learning rate for training (default: 0.0001)')
@@ -55,58 +63,61 @@ class CheckersTrainer:
             os.makedirs(checkpoint_dir)
 
         best_model_path = os.path.join(checkpoint_dir, 'best_model.pth')
-        for episode in range(self.episodes):
-            state = self.env.reset()
-            done = False
-            current_agent = self.agent1 if random.random() < 0.5 else self.agent2
-            opponent_agent = self.agent2 if current_agent == self.agent1 else self.agent1
-            player = 1 if current_agent == self.agent1 else -1
-            total_reward = 0
+        console = Console()
+        with Live(console=console, refresh_per_second=2) as live:
+            for episode in range(self.episodes):
+                state = self.env.reset()
+                done = False
+                current_agent = self.agent1 if random.random() < 0.5 else self.agent2
+                opponent_agent = self.agent2 if current_agent == self.agent1 else self.agent1
+                player = 1 if current_agent == self.agent1 else -1
+                total_reward = 0
 
-            while not done:
-                valid_moves = self.env.valid_moves(player)
-                if not valid_moves:
-                    break
+                while not done:
+                    valid_moves = self.env.valid_moves(player)
+                    if not valid_moves:
+                        break
 
-                action = current_agent.act(state, valid_moves)
-                next_state, reward, additional_moves, done = self.env.step(action, player)
+                    action = current_agent.act(state, valid_moves)
+                    next_state, reward, additional_moves, done = self.env.step(action, player)
 
-                # Encourage positional play
-                if player == 1:
-                    reward += 0.1 * (action[2] - action[0])
-                else:
-                    reward += 0.1 * (action[0] - action[2])
+                    # Encourage positional play
+                    if player == 1:
+                        reward += 0.1 * (action[2] - action[0])
+                    else:
+                        reward += 0.1 * (action[0] - action[2])
 
-                current_agent.remember(state, action, reward, next_state, done)
+                    current_agent.remember(state, action, reward, next_state, done)
 
-                if len(current_agent.memory) > current_agent.batch_size:
-                    current_agent.replay()
-                    if current_agent.epsilon > current_agent.epsilon_min:
-                        current_agent.epsilon = max(current_agent.epsilon_min,
-                                                    current_agent.epsilon * current_agent.epsilon_decay)
+                    if len(current_agent.memory) > current_agent.batch_size:
+                        current_agent.replay()
+                        if current_agent.epsilon > current_agent.epsilon_min:
+                            current_agent.epsilon = max(current_agent.epsilon_min,
+                                                        current_agent.epsilon * current_agent.epsilon_decay)
 
-                state = next_state
-                total_reward += reward
+                    state = next_state
+                    total_reward += reward
 
-                if not additional_moves:
-                    current_agent, opponent_agent = opponent_agent, current_agent
-                    player *= -1
+                    if not additional_moves:
+                        current_agent, opponent_agent = opponent_agent, current_agent
+                        player *= -1
 
-            if episode % 10 == 0:
-                self.agent1.update_target_network()
-                self.agent2.update_target_network()
+                if episode % 10 == 0:
+                    self.agent1.update_target_network()
+                    self.agent2.update_target_network()
 
-            self.rewards.append(total_reward)
+                self.rewards.append(total_reward)
 
-            winner = self.env.game_winner(state)
-            wins[winner] += 1
+                winner = self.env.game_winner(state)
+                wins[winner] += 1
 
-            if (episode + 1) % self.eval_frequency == 0:
-                self.evaluate()
-                win_rate = (wins[1] / max(1, (episode + 1))) * 100
-                self.win_rates.append(win_rate)
-                self.live_plot_terminal()
-                print(f"Episode {episode + 1}: Win rate {win_rate:.2f}%")
+                if (episode + 1) % self.eval_frequency == 0:
+                    self.evaluate()
+                    win_rate = (wins[1] / max(1, (episode + 1))) * 100
+                    self.win_rates.append(win_rate)
+                    plot = self.live_plot_terminal()
+                    live.update(Panel(plot, title="Win Rate"))
+                    print(f"Episode {episode + 1}: Win rate {win_rate:.2f}%")
 
         self.save_model(os.path.join(checkpoint_dir, f'model_final_e{self.episodes}.pth'))
         plot_path = os.path.join(checkpoint_dir, 'training_results.png')
@@ -141,14 +152,22 @@ class CheckersTrainer:
         print(f"Evaluation Results: Agent 1 Wins: {wins[1]}, Agent 2 Wins: {wins[-1]}, Draws: {wins[0]}")
 
     def live_plot_terminal(self):
-        tplt.clear_terminal()
-        # tplt.plot(self.win_rates, label='Win Rate (%)')
-        tplt.plot(range(self.eval_frequency, len(self.win_rates) * self.eval_frequency + 1, self.eval_frequency),
-                 self.win_rates, label='Win Rate')
-        tplt.xlabel('Episodes')
-        tplt.ylabel('Win Rate')
-        tplt.title('Live Training Progress')
-        tplt.show()
+        """Creates a live-updating plot using plotext."""
+        """Creates a live-updating plot using plotext with better scaling and readability."""
+        #tplt.clf()  # Clear previous plot
+
+        tplt.xlabel("Episodes")
+        tplt.ylabel("Win Rate (%)")
+
+        eval_episodes = range(0, len(self.rewards), self.eval_frequency)
+        if len(eval_episodes) > len(self.win_rates):
+            eval_episodes = eval_episodes[:len(self.win_rates)]
+        tplt.plot(eval_episodes, self.win_rates)
+        tplt.ylim(30, 100)  # Keep Y-axis fixed between 30% and 100%
+
+
+        return tplt.build()
+
 
     def plot_training_results(self, save_path='training_results.png'):
         plt.figure(figsize=(10, 5))
@@ -160,8 +179,10 @@ class CheckersTrainer:
         plt.legend()
 
         plt.subplot(1, 2, 2)
-        plt.plot(range(self.eval_frequency, len(self.win_rates) * self.eval_frequency + 1, self.eval_frequency),
-                 self.win_rates, label='Win Rate')
+        eval_episodes = range(0, len(self.rewards), self.eval_frequency)
+        if len(eval_episodes) > len(self.win_rates):
+            eval_episodes = eval_episodes[:len(self.win_rates)]
+        plt.plot(eval_episodes, self.win_rates)
         plt.xlabel('Episodes')
         plt.ylabel('Win Rate (%)')
         plt.title('Win Rate Progression')

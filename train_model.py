@@ -1,47 +1,40 @@
 import time
-
 import torch
 import numpy as np
 from rich.live import Live
 from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
 from rich.progress import Progress
 
 from checkers_env import checkers_env
 from DQNAgent import DQNAgent
 import matplotlib.pyplot as plt
-import plotext as tplt
 import os
 import random
 import argparse
 import math
 
 # Training parameters
-EPISODES = 1000
+EPISODES = 2000
 EVAL_FREQUENCY = 50
 EVAL_EPISODES = 50
 BATCH_SIZE = 256
-TARGET_UPDATE = 100
-MEMORY_SIZE = 100000
-LEARNING_RATE = 0.0005
+TARGET_UPDATE = 20
+MEMORY_SIZE = 300000
+LEARNING_RATE = 0.00025
 EPSILON_START = 1.0
 EPSILON_END = 0.05
-EPSILON_DECAY = 0.998
+EPSILON_DECAY = 0.995
+GAMMA = 0.99  # Long-term reward optimization
+TAU = 0.01  # Soft update for target network
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train Checkers AI')
-    parser.add_argument('--episodes', type=int, default=500,
-                        help='Number of episodes to train (default: 200)')
-    parser.add_argument('--eval-frequency', type=int, default=10,
-                        help='How often to evaluate the agent (default: 10)')
-    parser.add_argument('--learning-rate', type=float, default=0.00005,
-                        help='Learning rate for training (default: 0.00005)')
-    parser.add_argument('--batch-size', type=int, default=256,
-                        help='Batch size for replay (default: 256)')
-    parser.add_argument('--eval-games', type=int, default=100,
-                        help='Number of games to play during evaluation (default: 100)')
+    parser.add_argument('--episodes', type=int, default=2000, help='Number of episodes to train')
+    parser.add_argument('--eval-frequency', type=int, default=50, help='Evaluation frequency')
+    parser.add_argument('--learning-rate', type=float, default=0.00025, help='Learning rate')
+    parser.add_argument('--batch-size', type=int, default=256, help='Batch size for replay')
+    parser.add_argument('--eval-games', type=int, default=50, help='Number of evaluation games')
     return parser.parse_args()
 
 
@@ -59,17 +52,14 @@ class CheckersTrainer:
 
     def train(self):
         wins = {1: 0, -1: 0, 0: 0}
-        checkpoint_dir = 'checkpoints'
-        os.makedirs(checkpoint_dir, exist_ok=True)
-
+        os.makedirs('checkpoints', exist_ok=True)
         console = Console()
-        with Live(console=console, refresh_per_second=2) as live:
+        with Live(console=console, refresh_per_second=2):
             for episode in range(self.episodes):
                 state = self.env.reset()
                 done = False
-                current_agent = self.agent1 if random.random() < 0.5 else self.agent2
-                opponent_agent = self.agent2 if current_agent == self.agent1 else self.agent1
-                opponent_agent.epsilon = max(0.01, 0.3 - (episode / self.episodes) * 0.25)
+                current_agent, opponent_agent = (self.agent1, self.agent2) if random.random() < 0.5 else (self.agent2, self.agent1)
+                opponent_agent.epsilon = max(0.01, 0.2 - (episode / self.episodes) * 0.15)
                 player = 1 if current_agent == self.agent1 else -1
                 total_reward = 0
 
@@ -81,152 +71,76 @@ class CheckersTrainer:
                     action = current_agent.act(state, valid_moves)
                     next_state, reward, additional_moves, done = self.env.step(action, player)
 
-                    reward += 0.2 * (action[2] - action[0]) if player == 1 else 0.2 * (action[0] - action[2])
-                    reward += 3.0 if abs(action[2] - action[0]) == 2 else 0.0
-                    reward += 5.0 if (player == 1 and action[2] == self.env.board_size - 1) or (player == -1 and action[2] == 0) else 0.0
+                    reward += 0.4 * (action[2] - action[0]) if player == 1 else 0.4 * (action[0] - action[2])
+                    reward += 5.0 if abs(action[2] - action[0]) == 2 else 0.0
+                    reward += 7.0 if (player == 1 and action[2] == self.env.board_size - 1) or (player == -1 and action[2] == 0) else 0.0
 
                     current_agent.remember(state, action, reward, next_state, done)
-
-                    if len(current_agent.memory) > current_agent.batch_size:
+                    if len(current_agent.memory) > BATCH_SIZE:
                         current_agent.replay()
-                        if current_agent.epsilon > current_agent.epsilon_min:
-                            current_agent.epsilon = max(current_agent.epsilon_min,
-                                                        current_agent.epsilon * current_agent.epsilon_decay)
+                        current_agent.epsilon = max(current_agent.epsilon_min, current_agent.epsilon * EPSILON_DECAY)
 
                     state = next_state
                     total_reward += reward
-
                     if not additional_moves:
                         current_agent, opponent_agent = opponent_agent, current_agent
                         player *= -1
 
-                if episode % 5 == 0:
+                if episode % TARGET_UPDATE == 0:
                     self.agent1.update_target_network()
                     self.agent2.update_target_network()
 
                 self.rewards.append(total_reward)
-                winner = self.env.game_winner(state)
-                wins[winner] += 1
+                wins[self.env.game_winner(state)] += 1
 
                 if (episode + 1) % self.eval_frequency == 0:
-                    eval_wins = self.evaluate()
-                    if eval_wins:
-                        win_rate = (eval_wins[1] / max(1, (eval_wins[1] + eval_wins[-1] + eval_wins[0]))) * 100
-                        self.win_rates.append(win_rate)
-                        print(f"Episode {episode + 1}: Win rate {win_rate:.2f}%")
+                    win_rate = (self.evaluate()[1] / max(1, sum(wins.values()))) * 100
+                    self.win_rates.append(win_rate)
+                    print(f"Episode {episode + 1}: Win rate {win_rate:.2f}%")
 
-        self.save_model(os.path.join(checkpoint_dir, f'model_final_e{self.episodes}.pth'))
-        plot_path = os.path.join(checkpoint_dir, 'training_results.png')
-        self.plot_training_results(plot_path)
-
-        return self.agent1, self.agent2, self.rewards, self.win_rates, self.eval_frequency
+        self.save_model('checkpoints/model_final.pth')
+        self.plot_training_results()
+        return self.agent1, self.agent2, self.rewards, self.win_rates
 
     def evaluate(self):
         wins = {1: 0, -1: 0, 0: 0}
         for _ in range(self.eval_games):
             state = self.env.reset()
-            done = False
-            player = 1
+            done, player = False, 1
             while not done:
                 agent = self.agent1 if player == 1 else self.agent2
                 valid_moves = self.env.valid_moves(player)
-                if not valid_moves:
-                    opponent_moves = self.env.valid_moves(-player)
-                    if not opponent_moves or (len(self.env.valid_moves(1)) == 0 and len(self.env.valid_moves(-1)) == 0):
-                        wins[0] += 1
-                        break
-                    player *= -1
-                    continue
-                action = agent.act(state, valid_moves)
-                state, _, additional_moves, done = self.env.step(action, player)
+                if not valid_moves and not self.env.valid_moves(-player):
+                    wins[0] += 1
+                    break
+                action = agent.act(state, valid_moves) if valid_moves else None
+                state, _, additional_moves, done = self.env.step(action, player) if action else (state, 0, False, True)
                 if not additional_moves:
                     player *= -1
-            winner = self.env.game_winner(state)
-            wins[winner] += 1
+            wins[self.env.game_winner(state)] += 1
         return wins
 
-
-
-    def live_plot_terminal(self):
-        """Creates a live-updating plot using plotext."""
-        """Creates a live-updating plot using plotext with better scaling and readability."""
-        #tplt.clf()  # Clear previous plot
-
-        tplt.xlabel("Episodes")
-        tplt.ylabel("Win Rate (%)")
-
-        eval_episodes = range(0, len(self.rewards), self.eval_frequency)
-        if len(eval_episodes) > len(self.win_rates):
-            eval_episodes = eval_episodes[:len(self.win_rates)]
-        tplt.plot(eval_episodes, self.win_rates)
-        tplt.ylim(30, 100)  # Keep Y-axis fixed between 30% and 100%
-
-
-        return tplt.build()
-
-
-    def plot_training_results(self, save_path='training_results.png'):
+    def plot_training_results(self):
         plt.figure(figsize=(10, 5))
-        plt.subplot(1, 2, 1)
-        plt.plot(self.rewards, label='Rewards per Episode')
-        plt.xlabel('Episodes')
-        plt.ylabel('Rewards')
-        plt.title('Training Rewards')
-        plt.legend()
-
-        plt.subplot(1, 2, 2)
-        eval_episodes = list(
-            range(self.eval_frequency, len(self.win_rates) * self.eval_frequency + 1, self.eval_frequency))
-        plt.plot(eval_episodes, self.win_rates, label='Win Rate')
-        plt.xlabel('Episodes')
+        plt.plot(self.win_rates, label='Win Rate')
+        plt.xlabel('Evaluation Step')
         plt.ylabel('Win Rate (%)')
         plt.title('Win Rate Progression')
         plt.legend()
-
-        plt.savefig(save_path)
         plt.show()
 
-    def save_model(self, path="checkers_agent.pth"):
-        """Save the best performing agent based on win rate."""
+    def save_model(self, path):
         best_agent = self.agent1 if self.win_rates[-1] > self.win_rates[-2] else self.agent2
-        torch.save({
-            'episode': self.episodes,
-            'model_state_dict': best_agent.q_network.state_dict(),
-            'optimizer_state_dict': best_agent.optimizer.state_dict(),
-            'win_rate': self.win_rates[-1],
-            'epsilon': best_agent.epsilon
-        }, path)
-        print(f"Best model saved to {path} with win rate: {self.win_rates[-1]:.2f}%")
-        print(f"Model saved to {path}")
+        torch.save(best_agent.q_network.state_dict(), path)
+        print(f"Model saved to {path} with win rate: {self.win_rates[-1]:.2f}%")
 
 
-
-def train_agent(episodes=None):
+def train_agent():
     env = checkers_env()
-    agent = DQNAgent()
-    agent2 = DQNAgent()
-    checkersTrainer = CheckersTrainer(env, agent, agent2, args=parse_args())
-    return checkersTrainer.train()
+    agent1, agent2 = DQNAgent(), DQNAgent()
+    trainer = CheckersTrainer(env, agent1, agent2, parse_args())
+    return trainer.train()
 
-
-def load_trained_model(model_path):
-    """Load a trained model"""
-    agent = DQNAgent()  
-    
-    if os.path.exists(model_path):
-        checkpoint = torch.load(model_path, map_location=agent.device)
-        agent.q_network.load_state_dict(checkpoint['model_state_dict'])
-        agent.target_network.load_state_dict(checkpoint['model_state_dict'])
-        agent.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        agent.epsilon = checkpoint['epsilon']
-        
-        print(f"Loaded model from {model_path}")
-        print(f"Model win rate: {checkpoint['win_rate']:.2%}")
-        print(f"Model epsilon: {agent.epsilon:.3f}")
-    else:
-        print(f"No model found at {model_path}")
-    
-    return agent
 
 if __name__ == "__main__":
     train_agent()

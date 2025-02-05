@@ -10,47 +10,64 @@ import torch.nn.functional as F
 mp.set_start_method('spawn', force=True)  # Add this at the top of the file
 
 class ParallelDQN(nn.Module):
-    def __init__(self, state_size, action_size, hidden_size=512):
+    def __init__(self, state_shape=(6, 6), action_size=36, hidden_size=256, surprise_factor=0.1):
         super(ParallelDQN, self).__init__()
 
-        # Feature extractor using Conv1D
-        self.conv1 = nn.Conv1d(in_channels=1, out_channels=32, kernel_size=3, stride=1, padding=1)
-        self.conv2 = nn.Conv1d(in_channels=32, out_channels=64, kernel_size=3, stride=1, padding=1)
-        self.conv3 = nn.Conv1d(in_channels=64, out_channels=128, kernel_size=3, stride=1, padding=1)
+        self.surprise_factor = surprise_factor  # Bluffing randomness
 
-        self.fc1 = nn.Linear(128 * state_size, hidden_size)
-        self.fc2 = nn.Linear(hidden_size, hidden_size // 2)
+        # Convolutional layers to process board state
+        self.conv1 = nn.Conv2d(in_channels=1, out_channels=32, kernel_size=3, stride=1, padding=1)
+        self.conv2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=1, padding=1)
 
-        # Dueling architecture
-        self.value_stream = nn.Linear(hidden_size // 2, 1)
-        self.advantage_stream = nn.Linear(hidden_size // 2, action_size)
+        self.fc1 = nn.Linear(64 * 6 * 6, hidden_size)
+        self.fc2 = nn.Linear(hidden_size, hidden_size)
 
-        # Layer Normalization instead of BatchNorm
-        self.layer_norm1 = nn.LayerNorm(hidden_size)
-        self.layer_norm2 = nn.LayerNorm(hidden_size // 2)
+        # Dueling Q-network heads
+        self.value_stream = nn.Linear(hidden_size, 1)
+        self.advantage_stream = nn.Linear(hidden_size, action_size)
 
-        self.dropout = nn.Dropout(0.1)
+    def forward(self, x, train_mode=True):
+        x = x.view(-1, 1, 6, 6)  # Reshape input into (batch, channels, height, width)
 
-    def forward(self, x):
-        # Conv feature extraction
-        x = x.unsqueeze(1)  # Adding channel dimension
         x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
-        x = F.relu(self.conv3(x))
+
         x = x.view(x.size(0), -1)  # Flatten
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
 
-        # Fully connected layers
-        x = F.relu(self.layer_norm1(self.fc1(x)))
-        x = self.dropout(x)
-        x = F.relu(self.layer_norm2(self.fc2(x)))
-
-        # Dueling network
         value = self.value_stream(x)
         advantage = self.advantage_stream(x)
 
-        # Q-values = V + (A - mean(A))
+        # Compute Q-values
         q_values = value + (advantage - advantage.mean(dim=1, keepdim=True))
+
+        if train_mode:
+            # Introduce noise (bluff factor) randomly during training
+            noise = torch.randn_like(q_values) * self.surprise_factor
+            q_values += noise
+
         return q_values
+
+    def select_action(self, state, temperature=1.0, bluff_prob=0.1):
+        """ Selects an action using Boltzmann exploration (favoring high-reward moves)
+            and adds a bluffing component. """
+
+        with torch.no_grad():
+            q_values = self.forward(state, train_mode=False)
+
+            # Boltzmann distribution: prioritizes higher Q-values
+            probs = F.softmax(q_values / temperature, dim=-1)
+            action = torch.multinomial(probs, 1).item()
+
+            # Bluffing mechanism: 10% chance to pick a random lower Q-value action
+            if np.random.rand() < bluff_prob:
+                action = torch.randint(0, len(q_values[0]), (1,)).item()
+
+        return action
+
+
+
 class ParallelDQNB(nn.Module):
     def __init__(self, state_size, action_size, hidden_size=512):
         super(ParallelDQNB, self).__init__()

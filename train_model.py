@@ -32,14 +32,14 @@ EPSILON_DECAY = 0.998
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train Checkers AI')
-    parser.add_argument('--episodes', type=int, default=200,
+    parser.add_argument('--episodes', type=int, default=500,
                         help='Number of episodes to train (default: 200)')
     parser.add_argument('--eval-frequency', type=int, default=10,
-                        help='How often to evaluate the agent (default: 100)')
-    parser.add_argument('--learning-rate', type=float, default=0.0001,
-                        help='Learning rate for training (default: 0.0001)')
-    parser.add_argument('--batch-size', type=int, default=128,
-                        help='Batch size for replay (default: 128)')
+                        help='How often to evaluate the agent (default: 10)')
+    parser.add_argument('--learning-rate', type=float, default=0.00005,
+                        help='Learning rate for training (default: 0.00005)')
+    parser.add_argument('--batch-size', type=int, default=256,
+                        help='Batch size for replay (default: 256)')
     parser.add_argument('--eval-games', type=int, default=100,
                         help='Number of games to play during evaluation (default: 100)')
     return parser.parse_args()
@@ -81,19 +81,16 @@ class CheckersTrainer:
                     action = current_agent.act(state, valid_moves)
                     next_state, reward, additional_moves, done = self.env.step(action, player)
 
-                    # Encourage positional play
                     if player == 1:
-                        reward += 0.1 * (action[2] - action[0])  # Forward movement bonus
+                        reward += 0.2 * (action[2] - action[0])
                     else:
-                        reward += 0.1 * (action[0] - action[2])
+                        reward += 0.2 * (action[0] - action[2])
 
-                    # Capture Bonus
-                    if abs(action[2] - action[0]) == 2:  # A jump move
-                        reward += 2.0  # Encourage captures
+                    if abs(action[2] - action[0]) == 2:
+                        reward += 3.0
 
-                    # King Promotion Bonus
                     if (player == 1 and action[2] == self.env.board_size - 1) or (player == -1 and action[2] == 0):
-                        reward += 3.0  # High reward for king promotion
+                        reward += 5.0
 
                     current_agent.remember(state, action, reward, next_state, done)
 
@@ -110,7 +107,7 @@ class CheckersTrainer:
                         current_agent, opponent_agent = opponent_agent, current_agent
                         player *= -1
 
-                if episode % 10 == 0:
+                if episode % 5 == 0:
                     self.agent1.update_target_network()
                     self.agent2.update_target_network()
 
@@ -120,18 +117,16 @@ class CheckersTrainer:
                 wins[winner] += 1
 
                 if (episode + 1) % self.eval_frequency == 0:
-                    # Adjust weaker agent's exploration
-                    if wins[1] > wins[-1]:  # Agent 1 is stronger
-                        self.agent2.epsilon = min(1.0, self.agent2.epsilon * 1.1)
-                    elif wins[-1] > wins[1]:  # Agent 2 is stronger
-                        self.agent1.epsilon = min(1.0, self.agent1.epsilon * 1.1)
+                    if wins[1] > wins[-1]:
+                        self.agent2.epsilon = min(1.0, self.agent2.epsilon * 1.2)
+                    elif wins[-1] > wins[1]:
+                        self.agent1.epsilon = min(1.0, self.agent1.epsilon * 1.2)
 
-                    # Adjust training for weaker agent
-                    if wins[1] > 0.65 * sum(wins.values()):
-                        for _ in range(5):
+                    if wins[1] > 0.6 * sum(wins.values()):
+                        for _ in range(7):
                             self.agent2.replay()
-                    elif wins[-1] > 0.65 * sum(wins.values()):
-                        for _ in range(5):
+                    elif wins[-1] > 0.6 * sum(wins.values()):
+                        for _ in range(7):
                             self.agent1.replay()
                     self.evaluate()
                     win_rate = (wins[1] / max(1, (wins[1] + wins[-1] + wins[0]))) * 100
@@ -145,6 +140,7 @@ class CheckersTrainer:
         self.plot_training_results(plot_path)
 
         return self.agent1, self.agent2, self.rewards, self.win_rates, self.eval_frequency
+
     def evaluate(self):
         wins = {1: 0, -1: 0, 0: 0}
 

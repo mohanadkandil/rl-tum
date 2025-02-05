@@ -53,6 +53,7 @@ class CheckersTrainer:
         self.episodes = args.episodes
         self.eval_frequency = args.eval_frequency
         self.eval_games = args.eval_games
+        self.args = args
         self.rewards = []
         self.win_rates = []
 
@@ -109,7 +110,9 @@ class CheckersTrainer:
 
                 if episode % 5 == 0:
                     self.agent1.update_target_network()
+                    self.agent1.optimizer.param_groups[0]['lr'] = self.args.learning_rate
                     self.agent2.update_target_network()
+                    self.agent2.optimizer.param_groups[0]['lr'] = self.args.learning_rate
 
                 self.rewards.append(total_reward)
 
@@ -128,9 +131,15 @@ class CheckersTrainer:
                     elif wins[-1] > 0.6 * sum(wins.values()):
                         for _ in range(7):
                             self.agent1.replay()
-                    self.evaluate()
-                    win_rate = (wins[1] / max(1, (wins[1] + wins[-1] + wins[0]))) * 100
+                    eval_wins = self.evaluate()
+                    win_rate = (eval_wins[1] / max(1, (eval_wins[1] + eval_wins[-1] + eval_wins[0]))) * 100
                     self.win_rates.append(win_rate)
+                    if win_rate < 50:
+                        self.agent1.epsilon = min(1.0, self.agent1.epsilon * 1.15)
+                        self.agent2.epsilon = min(1.0, self.agent2.epsilon * 1.15)
+                        for _ in range(10):
+                            self.agent1.replay()
+                            self.agent2.replay()
                     plot = self.live_plot_terminal()
                     live.update(Panel(plot, title="Win Rate"))
                     print(f"Episode {episode + 1}: Win rate {win_rate:.2f}%")
@@ -170,13 +179,14 @@ class CheckersTrainer:
 
             winner = self.env.game_winner(state)
 
-            # Ensure stalemates are counted as draws
             if winner == 0:
                 wins[0] += 1
             else:
                 wins[winner] += 1
 
         print(f"Evaluation Results: Agent 1 Wins: {wins[1]}, Agent 2 Wins: {wins[-1]}, Draws: {wins[0]}")
+
+        return wins  # Return evaluation results
 
     def live_plot_terminal(self):
         """Creates a live-updating plot using plotext."""
@@ -229,6 +239,7 @@ class CheckersTrainer:
         }, path)
         print(f"Best model saved to {path} with win rate: {self.win_rates[-1]:.2f}%")
         print(f"Model saved to {path}")
+
 
 
 def train_agent(episodes=None):

@@ -9,15 +9,55 @@ import torch.nn.functional as F
 
 mp.set_start_method('spawn', force=True)  # Add this at the top of the file
 
-
 class ParallelDQN(nn.Module):
     def __init__(self, state_size, action_size, hidden_size=512):
         super(ParallelDQN, self).__init__()
 
+        # Feature extractor using Conv1D
+        self.conv1 = nn.Conv1d(in_channels=1, out_channels=32, kernel_size=3, stride=1, padding=1)
+        self.conv2 = nn.Conv1d(in_channels=32, out_channels=64, kernel_size=3, stride=1, padding=1)
+        self.conv3 = nn.Conv1d(in_channels=64, out_channels=128, kernel_size=3, stride=1, padding=1)
+
+        self.fc1 = nn.Linear(128 * state_size, hidden_size)
+        self.fc2 = nn.Linear(hidden_size, hidden_size // 2)
+
+        # Dueling architecture
+        self.value_stream = nn.Linear(hidden_size // 2, 1)
+        self.advantage_stream = nn.Linear(hidden_size // 2, action_size)
+
+        # Layer Normalization instead of BatchNorm
+        self.layer_norm1 = nn.LayerNorm(hidden_size)
+        self.layer_norm2 = nn.LayerNorm(hidden_size // 2)
+
+        self.dropout = nn.Dropout(0.1)
+
+    def forward(self, x):
+        # Conv feature extraction
+        x = x.unsqueeze(1)  # Adding channel dimension
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
+        x = F.relu(self.conv3(x))
+        x = x.view(x.size(0), -1)  # Flatten
+
+        # Fully connected layers
+        x = F.relu(self.layer_norm1(self.fc1(x)))
+        x = self.dropout(x)
+        x = F.relu(self.layer_norm2(self.fc2(x)))
+
+        # Dueling network
+        value = self.value_stream(x)
+        advantage = self.advantage_stream(x)
+
+        # Q-values = V + (A - mean(A))
+        q_values = value + (advantage - advantage.mean(dim=1, keepdim=True))
+        return q_values
+class ParallelDQNB(nn.Module):
+    def __init__(self, state_size, action_size, hidden_size=512):
+        super(ParallelDQNB, self).__init__()
+
         self.fc1 = nn.Linear(state_size, hidden_size)
         self.bn1 = nn.BatchNorm1d(hidden_size)
         self.fc2 = nn.Linear(hidden_size, hidden_size * 2)
-        self.bn2 = nn.BatchNorm1d(hidden_size * 2)
         self.fc3 = nn.Linear(hidden_size * 2, hidden_size)
         self.bn3 = nn.BatchNorm1d(hidden_size)
         self.fc4 = nn.Linear(hidden_size, action_size)
@@ -31,7 +71,7 @@ class ParallelDQN(nn.Module):
     def forward(self, x):
         x = F.relu(self.bn1(self.fc1(x)))
         x = self.dropout(x)
-        x = F.relu(self.bn2(self.fc2(x)))
+        x = F.relu(self.fc2(x))
         x = self.dropout(x)
         x = F.relu(self.bn3(self.fc3(x)))
         return self.fc4(x)
@@ -104,7 +144,7 @@ class DQNAgent:
         self.epsilon_decay = 0.9995  # More gradual decay (was 0.995)
         self.learning_rate = 0.0001
         self.batch_size = 128  # Increased batch size for H100
-        self.hidden_size = hidden_size=512
+        self.hidden_size = 512
         # H100 specific optimizations
         if torch.cuda.is_available():
             torch.cuda.set_device(0)
@@ -150,8 +190,8 @@ class DQNAgent:
             return model
         
         # Create networks and ensure they're on GPU
-        self.q_network = ParallelDQN(state_size, action_size, hidden_size).to(self.device)
-        self.target_network = ParallelDQN(state_size, action_size, hidden_size).to(self.device)
+        self.q_network = ParallelDQN(state_size, action_size, self.hidden_size).to(self.device)
+        self.target_network = ParallelDQN(state_size, action_size, self.hidden_size).to(self.device)
         
         # Use mixed precision training only if CUDA is available
         self.scaler = torch.amp.GradScaler('cuda') if torch.cuda.is_available() else None

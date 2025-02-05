@@ -146,7 +146,13 @@ class CheckersTrainer:
                 valid_moves = self.env.valid_moves(player)
 
                 if not valid_moves:
-                    break
+                    opponent_moves = self.env.valid_moves(-player)
+                    if not opponent_moves:  # Both players have no valid moves -> Draw
+                        wins[0] += 1
+                        break
+                    else:
+                        player *= -1
+                        continue  # Switch turn
 
                 action = agent.act(state, valid_moves)
                 state, _, additional_moves, done = self.env.step(action, player)

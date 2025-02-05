@@ -20,14 +20,24 @@ EPSILON_START = 1.0
 EPSILON_END = 0.05
 EPSILON_DECAY = 0.998
 
-
+def parse_args():
+    parser = argparse.ArgumentParser(description='Train Checkers AI')
+    parser.add_argument('--episodes', type=int, default=200,
+                       help='Number of episodes to train (default: 200)')
+    parser.add_argument('--eval-frequency', type=int, default=100,
+                       help='How often to evaluate the agent (default: 100)')
+    parser.add_argument('--learning-rate', type=float, default=0.0001,
+                       help='Learning rate for training (default: 0.0001)')
+    parser.add_argument('--batch-size', type=int, default=128,
+                       help='Batch size for replay (default: 128)')
+    return parser.parse_args()
 class CheckersTrainer:
-    def __init__(self, env, agent1, agent2, episodes=1000, eval_frequency=100):
+    def __init__(self, env, agent1, agent2, args):
         self.env = env
         self.agent1 = agent1
         self.agent2 = agent2
-        self.episodes = episodes
-        self.eval_frequency = eval_frequency
+        self.episodes = args.episodes
+        self.eval_frequency = args.eval_frequency
         self.rewards = []
         self.win_rates = []
 
@@ -133,19 +143,11 @@ class CheckersTrainer:
         print(f"Model saved to {path}")
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(description='Train Checkers AI')
-    parser.add_argument('--episodes', type=int, default=200,
-                        help='Number of episodes to train (default: 200)')
-    parser.add_argument('--eval-frequency', type=int, default=100,
-                        help='How often to evaluate the agent (default: 100)')
-    return parser.parse_args()
-
 def train_agent(episodes=None):
     env = checkers_env()
     agent = DQNAgent()
     agent2 = DQNAgent()
-    checkersTrainer = CheckersTrainer(env, agent, agent2)
+    checkersTrainer = CheckersTrainer(env, agent, agent2, args=parse_args())
     return checkersTrainer.train()
 
 
